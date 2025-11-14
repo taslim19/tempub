@@ -1,15 +1,9 @@
-# Ultroid - UserBot
+# Ultroid - UserBot (Inline mode version)
 # Copyright (C) 2021-2025 TeamUltroid
-#
-# This file is a part of < https://github.com/TeamUltroid/Ultroid/ >
-# PLease read the GNU Affero General Public License in
-# <https://www.github.com/TeamUltroid/Ultroid/blob/main/LICENSE/>.
+# Converted help command into inline query handler
 
-from telethon.errors.rpcerrorlist import (
-    BotInlineDisabledError,
-    BotMethodInvalidError,
-    BotResponseTimeoutError,
-)
+from telethon import events
+from telethon.tl import types
 from telethon.tl.custom import Button
 
 from pyUltroid.dB._core import HELP, LIST
@@ -36,8 +30,13 @@ _main_help_menu = [
 ]
 
 
-@ultroid_cmd(pattern="help( (.*)|$)")
+@ultroid_cmd(pattern="help( (.*)|$")
 async def _help(ult):
+    """Backward-compatible `.help` command.
+    If the bot can query its own inline results, it will try to show the inline help menu
+    (same behavior as before). This handler is kept for compatibility with scripts that
+    call `.help` directly.
+    """
     plug = ult.pattern_match.group(1).strip()
     chat = await ult.get_chat()
     if plug:
@@ -107,30 +106,72 @@ async def _help(ult):
             LOGS.exception(er)
             await ult.eor("Error 🤔 occured.")
     else:
+        # Try to use inline mode by querying our own bot inline results (keeps previous behavior)
         try:
             results = await ult.client.inline_query(asst.me.username, "ultd")
-        except BotMethodInvalidError:
-            z = []
-            for x in LIST.values():
-                z.extend(x)
-            cmd = len(z) + 10
-            if udB.get_key("MANAGER") and udB.get_key("DUAL_HNDLR") == "/":
-                _main_help_menu[2:3] = [[Button.inline("• Manager Help •", "mngbtn")]]
-            return await ult.reply(
-                get_string("inline_4").format(
-                    OWNER_NAME,
-                    len(HELP["Official"]),
-                    len(HELP["Addons"] if "Addons" in HELP else []),
-                    cmd,
-                ),
-                file=inline_pic(),
-                buttons=_main_help_menu,
-            )
-        except BotResponseTimeoutError:
-            return await ult.eor(
-                get_string("help_2").format(HNDLR),
-            )
-        except BotInlineDisabledError:
-            return await ult.eor(get_string("help_3"))
-        await results[0].click(chat.id, reply_to=ult.reply_to_msg_id, hide_via=True)
-        await ult.delete()
+        except Exception:
+            # If inline fails for any reason, fall back to sending a direct message with buttons
+            try:
+                if udB.get_key("MANAGER") and udB.get_key("DUAL_HNDLR") == "/":
+                    _main_help_menu[2:3] = [[Button.inline("• Manager Help •", "mngbtn")]]
+                return await ult.reply(
+                    get_string("inline_4").format(
+                        OWNER_NAME,
+                        len(HELP["Official"]),
+                        len(HELP["Addons"] if "Addons" in HELP else []),
+                        sum(len(v) for v in LIST.values()) + 10,
+                    ),
+                    file=inline_pic(),
+                    buttons=_main_help_menu,
+                )
+            except Exception as e:
+                LOGS.exception(e)
+                return await ult.eor(get_string("help_2").format(HNDLR))
+        else:
+            # Click the first inline result to display it in chat (same as before)
+            try:
+                await results[0].click(chat.id, reply_to=ult.reply_to_msg_id, hide_via=True)
+                await ult.delete()
+            except Exception as e:
+                LOGS.exception(e)
+                await ult.eor(get_string("help_2").format(HNDLR))
+
+
+# New: InlineQuery handler to provide help directly via inline mode
+@asst.on(events.InlineQuery)
+async def inline_help_handler(event: events.InlineQuery.Event):
+    """Respond to inline queries only when the user types exactly: `help`.
+    This ensures the inline result appears only for that keyword.
+    """
+    query = (event.text or "").strip()
+    # Only respond when the inline query is exactly 'help'
+    if not query or query.lower() != "help":
+        return
+    try:
+        # Build the help text (a short summary shown in inline result)
+        summary = get_string("inline_4").format(
+            OWNER_NAME,
+            len(HELP.get("Official", {})),
+            len(HELP.get("Addons", {})),
+            sum(len(v) for v in LIST.values()) + 10,
+        )
+        # Build the message that will be sent when user selects the inline result
+        full_msg = summary + "
+
+© @TeamUltroid"
+
+        result = types.InputBotInlineResult(
+            id="ultroid_help_1",
+            type="article",
+            title="Ultroid Help",
+            description="Open Ultroid main help menu",
+            url=None,
+            thumb=None,
+            send_message=types.InputBotInlineMessageText(
+                message=full_msg,
+            ),
+        )
+        await event.answer([result], cache_time=0)
+    except Exception as e:
+        LOGS.exception(e)
+        return
