@@ -1,6 +1,8 @@
 # --- Auto-update monitor (place after imports) ---
 import threading
 import subprocess
+import os
+
 
 # Enable / disable and interval via env:
 AUTO_UPDATE_ENABLED = os.getenv("AUTO_UPDATE_ENABLED", "true").lower() not in ("0", "false", "no")
