@@ -2,6 +2,7 @@
 import threading
 import subprocess
 import os
+from . import LOGS
 
 
 # Enable / disable and interval via env:
