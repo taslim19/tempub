@@ -156,9 +156,7 @@ async def inline_help_handler(event: events.InlineQuery.Event):
             sum(len(v) for v in LIST.values()) + 10,
         )
         # Build the message that will be sent when user selects the inline result
-        full_msg = summary + "
-
-© @TeamUltroid"
+        full_msg = summary + "© @TeamUltroid"
 
         result = types.InputBotInlineResult(
             id="ultroid_help_1",
