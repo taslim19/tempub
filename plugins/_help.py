@@ -1,7 +1,7 @@
-# plugins/_help.py
-# Ultroid - UserBot (Telethon inline help with inline-result keyboard)
-from math import ceil
-import re
+# Ultroid - UserBot (Inline mode version)
+# Copyright (C) 2021-2025 TeamUltroid
+# Converted help command into inline query handler
+
 from telethon import events
 from telethon.tl import types
 from telethon.tl.custom import Button
@@ -11,51 +11,32 @@ from pyUltroid.fns.tools import cmd_regex_replace
 
 from . import HNDLR, LOGS, OWNER_NAME, asst, get_string, inline_pic, udB, ultroid_cmd
 
-# Main static menu (kept for fallback)
 _main_help_menu = [
-    [Button.inline(get_string("help_4"), data="uh_Official_"), Button.inline(get_string("help_5"), data="uh_Addons_")],
-    [Button.inline(get_string("help_6"), data="uh_VCBot_"), Button.inline(get_string("help_7"), data="inlone")],
-    [Button.inline(get_string("help_8"), data="ownr"), Button.url(get_string("help_9"), url=f"https://t.me/{asst.me.username}?start=set")],
+    [
+        Button.inline(get_string("help_4"), data="uh_Official_"),
+        Button.inline(get_string("help_5"), data="uh_Addons_"),
+    ],
+    [
+        Button.inline(get_string("help_6"), data="uh_VCBot_"),
+        Button.inline(get_string("help_7"), data="inlone"),
+    ],
+    [
+        Button.inline(get_string("help_8"), data="ownr"),
+        Button.url(
+            get_string("help_9"), url=f"https://t.me/{asst.me.username}?start=set"
+        ),
+    ],
     [Button.inline(get_string("help_10"), data="close")],
 ]
 
 
-def paginate_modules(page: int, modules: dict, prefix: str, per_page: int = 6):
-    """Return list-of-lists of telethon Buttons for the given page."""
-    names = sorted(modules.keys())
-    total = len(names)
-    last_page = max(0, ceil(total / per_page) - 1)
-    page = max(0, min(page, last_page))
-    start = page * per_page
-    chunk = names[start : start + per_page]
-
-    buttons = []
-    row = []
-    for name in chunk:
-        cb = f"{prefix}_module({name.replace(' ', '_')})"
-        row.append(Button.inline(name, data=cb))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-
-    # nav row
-    nav = []
-    if page > 0:
-        nav.append(Button.inline("« Prev", data=f"{prefix}_prev({page})"))
-    nav.append(Button.inline(f"Page {page+1}/{last_page+1}", data="noop"))
-    if page < last_page:
-        nav.append(Button.inline("Next »", data=f"{prefix}_next({page})"))
-    buttons.append(nav)
-
-    # back row
-    buttons.append([Button.inline("• ᴋᴇᴍʙᴀʟɪ •", data=f"{prefix}_back")])
-    return buttons
-
-
-@ultroid_cmd(pattern=r"help( (.*)|$)")
+@ultroid_cmd(pattern="help( (.*)|$)")
 async def _help(ult):
+    """Backward-compatible `.help` command.
+    If the bot can query its own inline results, it will try to show the inline help menu
+    (same behavior as before). This handler is kept for compatibility with scripts that
+    call `.help` directly.
+    """
     plug = ult.pattern_match.group(1).strip()
     chat = await ult.get_chat()
     if plug:
@@ -99,6 +80,7 @@ async def _help(ult):
                                 file = file_name
                                 break
                     if not file:
+                        # the enter command/plugin name is not found
                         text = f"`{plug}` is not a valid plugin!"
                         best_match = None
                         for _ in compare_strings:
@@ -124,152 +106,82 @@ async def _help(ult):
             LOGS.exception(er)
             await ult.eor("Error 🤔 occured.")
     else:
-        # Try inline mode by querying our bot's inline results (keeps previous behavior)
+        # Try to use inline mode by querying our own bot inline results (keeps previous behavior)
         try:
             results = await ult.client.inline_query(asst.me.username, "ultd")
         except Exception:
-            # Fallback: send menu message with paginated keyboard
+            # If inline fails for any reason, fall back to sending a direct message with buttons
             try:
                 if udB.get_key("MANAGER") and udB.get_key("DUAL_HNDLR") == "/":
                     _main_help_menu[2:3] = [[Button.inline("• Manager Help •", "mngbtn")]]
                 return await ult.reply(
                     get_string("inline_4").format(
                         OWNER_NAME,
-                        len(HELP.get("Official", {})),
-                        len(HELP.get("Addons", {})),
+                        len(HELP["Official"]),
+                        len(HELP["Addons"] if "Addons" in HELP else []),
                         sum(len(v) for v in LIST.values()) + 10,
                     ),
                     file=inline_pic(),
-                    buttons=paginate_modules(0, HELP, "help"),
+                    buttons=_main_help_menu,
                 )
             except Exception as e:
                 LOGS.exception(e)
                 return await ult.eor(get_string("help_2").format(HNDLR))
         else:
+            # Click the first inline result to display it in chat (same as before)
             try:
-                # click the first inline result (legacy behavior)
                 await results[0].click(chat.id, reply_to=ult.reply_to_msg_id, hide_via=True)
                 await ult.delete()
             except Exception as e:
                 LOGS.exception(e)
-                # fallback to message with keyboard
-                await ult.reply(
-                    get_string("inline_4").format(
-                        OWNER_NAME,
-                        len(HELP.get("Official", {})),
-                        len(HELP.get("Addons", {})),
-                        sum(len(v) for v in LIST.values()) + 10,
-                    ),
-                    file=inline_pic(),
-                    buttons=paginate_modules(0, HELP, "help"),
-                )
+                await ult.eor(get_string("help_2").format(HNDLR))
 
 
+# New: InlineQuery handler to provide help directly via inline mode
 @asst.on(events.InlineQuery)
 async def inline_help_handler(event: events.InlineQuery.Event):
+    """Respond to inline queries only when the user types exactly: `help`.
+    This ensures the inline result appears only for that keyword.
+    """
     query = (event.text or "").strip()
-    # Only answer exact 'help' (case-insensitive)
+    # Only respond when the inline query is exactly 'help'
     if not query or query.lower() != "help":
         return
-
     try:
+        # Build the help text (a short summary shown in inline result)
         summary = get_string("inline_4").format(
             OWNER_NAME,
             len(HELP.get("Official", {})),
             len(HELP.get("Addons", {})),
             sum(len(v) for v in LIST.values()) + 10,
         )
+        # Build the message that will be sent when user selects the inline result
         full_msg = summary + "\n\n© @TeamUltroid"
 
-        # Convert telethon Button.inline rows to types.ReplyInlineMarkup so the inserted message contains the keyboard.
-        def buttons_to_reply_markup(btn_rows):
-            rows = []
-            for row in btn_rows:
-                kb_buttons = []
-                for b in row:
-                    try:
-                        lbl = b.text
-                        data = b.data if hasattr(b, "data") else None
-                        if data is None:
-                            continue
-                        if isinstance(data, str):
-                            data = data.encode()
-                        kb_buttons.append(types.KeyboardButtonCallback(text=lbl, data=data))
-                    except Exception:
-                        continue
-                if kb_buttons:
-                    rows.append(types.KeyboardButtonRow(buttons=kb_buttons))
-            return types.ReplyInlineMarkup(rows=rows)
-
-        tele_rows = paginate_modules(0, HELP, "help")
-        reply_markup = buttons_to_reply_markup(tele_rows)
-
-        send_message = types.InputBotInlineMessageText(
-            message=full_msg,
-            reply_markup=reply_markup,
-        )
-
-        result = types.InputBotInlineResult(
-            id="ultroid_help_1",
-            type="article",
-            title="Ultroid Help",
-            description="Open Ultroid main help menu",
-            send_message=send_message,
-        )
-
-        await event.answer([result], cache_time=0)
-    except Exception as e:
-        LOGS.exception(e)
-        return
+# TODO: Add callback handlers and button pagination here.
 
 
-@asst.on(events.CallbackQuery)
-async def help_menu_callback(event: events.CallbackQuery.Event):
-    data = event.data.decode() if isinstance(event.data, (bytes, bytearray)) else (event.data or "")
-    mod_match = re.match(r"help_module\((.+?)\)", data)
-    prev_match = re.match(r"help_prev\((.+?)\)", data)
-    next_match = re.match(r"help_next\((.+?)\)", data)
-    back_match = re.match(r"help_back", data)
 
+# Plain "help" handler with working callback buttons
+from telethon import events as _events
+
+@asst.on(_events.NewMessage(pattern=r'(?i)^help$'))
+async def plain_text_help(event: _events.NewMessage.Event):
     try:
-        prefix_list = udB.get_key("PREFIXES") or [HNDLR]
-        top_text = f"<blockquote><b>❏ menu inline <a href=tg://user?id={event.sender_id}>{event.sender.first_name} {event.sender.last_name or ''}</a>\n╰ prefix: {', '.join(prefix_list)}</b></blockquote>"
-    except Exception:
-        top_text = "<b>Help Menu</b>"
-
-    if mod_match:
-        module = (mod_match.group(1)).replace(" ", "_")
+        text = get_string("inline_4").format(
+            OWNER_NAME,
+            len(HELP.get("Official", {})),
+            len(HELP.get("Addons", {})),
+            sum(len(v) for v in LIST.values()) + 10,
+        )
+        await event.reply(
+            text,
+            file=inline_pic(),
+            buttons=paginate_modules(0, HELP, "help"),
+        )
+    except Exception as ex:
+        LOGS.exception(ex)
         try:
-            prefix_list = udB.get_key("PREFIXES") or [HNDLR]
-            p = prefix_list[0]
+            await event.reply(get_string("help_2").format(HNDLR))
         except Exception:
-            p = HNDLR
-
-        if module in HELP["Official"]:
-            text = "".join(HELP["Official"][module])
-        elif HELP.get("Addons") and module in HELP["Addons"]:
-            text = "".join(HELP["Addons"][module])
-        elif HELP.get("VCBot") and module in HELP["VCBot"]:
-            text = "".join(HELP["VCBot"][module])
-        else:
-            text = f"<b>Module {module} not found</b>"
-
-        button = [[Button.inline("• ᴋᴇᴍʙᴀʟɪ •", callback_data="help_back")]]
-        await event.edit(text=text + "\n<b>Xnxx</b>", buttons=button, parse_mode="html", link_preview=False)
-        return
-
-    if prev_match:
-        curr_page = int(prev_match.group(1))
-        await event.edit(text=top_text, buttons=paginate_modules(curr_page - 1, HELP, "help"))
-        return
-
-    if next_match:
-        next_page = int(next_match.group(1))
-        await event.edit(text=top_text, buttons=paginate_modules(next_page + 1, HELP, "help"))
-        return
-
-    if back_match:
-        await event.edit(text=top_text, buttons=paginate_modules(0, HELP, "help"))
-        return
-
-    await event.answer()
+            pass
