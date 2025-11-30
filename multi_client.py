@@ -3,6 +3,18 @@ import os
 import subprocess
 import sys
 
+# Load environment variables from .env file if it exists
+env_loaded = False
+try:
+    from dotenv import load_dotenv
+    if os.path.exists(".env"):
+        load_dotenv()
+        env_loaded = True
+    else:
+        load_dotenv()  # Try loading anyway, might be in a different location
+except ImportError:
+    pass
+
 vars = ["API_ID", "API_HASH", "SESSION", "MONGO_URI"]
 
 def _check(z):
@@ -17,7 +29,12 @@ def _check(z):
 print("=" * 50)
 print("Multi-Client Ultroid Launcher")
 print("=" * 50)
-print()
+if env_loaded or os.path.exists(".env"):
+    print("✓ Loading environment variables from .env file")
+    print()
+else:
+    print("ℹ Note: No .env file found. Using environment variables only.")
+    print()
 
 started_clients = []
 
