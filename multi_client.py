@@ -14,11 +14,20 @@ def _check(z):
         new.append(ent)
     return True, new
 
+print("=" * 50)
+print("Multi-Client Ultroid Launcher")
+print("=" * 50)
+print()
+
+started_clients = []
+
 for z in range(5):
     n = str(z + 1)
     suffix = "" if z == 0 else str(z)  # Client 1 has no suffix, others use number
     fine, out = _check(suffix)
     if fine:
+        print(f"✓ Client {n}: Configuration found")
+        
         # Create environment dict with variables for this client
         env = os.environ.copy()
         env["MONGO_URI"] = out[3]  # MONGO_URI is passed via environment, not command line
@@ -32,25 +41,60 @@ for z in range(5):
         
         if log_channel:
             env["LOG_CHANNEL"] = log_channel
+            print(f"  → LOG_CHANNEL: {log_channel[:20]}...")
         if bot_token:
             env["BOT_TOKEN"] = bot_token
+            print(f"  → BOT_TOKEN: {bot_token[:20]}...")
         
-        subprocess.Popen(
-            [sys.executable, "-m", "pyUltroid", out[0], out[1], out[2], "", "", n],
-            stdin=None,
-            stderr=None,
-            stdout=None,
-            cwd=None,
-            env=env,
-        )
+        print(f"  → Starting Client {n}...")
+        
+        try:
+            process = subprocess.Popen(
+                [sys.executable, "-m", "pyUltroid", out[0], out[1], out[2], "", "", n],
+                stdin=None,
+                stderr=None,
+                stdout=None,
+                cwd=None,
+                env=env,
+            )
+            started_clients.append((n, process.pid))
+            print(f"  → Client {n} started (PID: {process.pid})")
+            print()
+        except Exception as e:
+            print(f"  ✗ Error starting Client {n}: {e}")
+            print()
+    else:
+        missing_vars = [var for var in vars if not os.environ.get(var + suffix)]
+        if missing_vars:
+            print(f"✗ Client {n}: Skipped (missing: {', '.join(missing_vars)})")
+
+print("=" * 50)
+if started_clients:
+    print(f"✓ Successfully started {len(started_clients)} client(s):")
+    for client_num, pid in started_clients:
+        print(f"  - Client {client_num} (PID: {pid})")
+    print()
+    print("All clients are running in the background.")
+    print("Press Ctrl+C to stop the launcher (clients will continue running).")
+    print("=" * 50)
+else:
+    print("✗ No clients were started. Please check your environment variables.")
+    print("=" * 50)
+    sys.exit(1)
 
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
 try:
     loop.run_forever()
+except KeyboardInterrupt:
+    print("\n" + "=" * 50)
+    print("Launcher stopped by user (Ctrl+C)")
+    print("Note: Client processes are still running in the background.")
+    print("To stop clients, you'll need to kill their processes manually.")
+    print("=" * 50)
 except Exception as er:
-    print(er)
+    print(f"\n✗ Error: {er}")
 finally:
     loop.close()
 
