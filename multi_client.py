@@ -28,7 +28,8 @@ for z in range(5):
             cwd=None,
         )
 
-loop = asyncio.get_event_loop()
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 try:
     loop.run_forever()
