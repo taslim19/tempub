@@ -235,7 +235,7 @@ except Exception as e:
 
 # Now run pyUltroid (it will use the patched Repo)
 if __name__ == "__main__":
-    sys.argv = ["pyUltroid", "{out[0]}", "{out[1]}", "{out[2]}", "", "", "{n}"]
+    sys.argv = ["pyUltroid", "{out0}", "{out1}", "{out2}", "", "", "{n}"]
     from pyUltroid.__main__ import main
     main()
 '''.format(
