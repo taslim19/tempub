@@ -111,13 +111,19 @@ for z in range(5):
         base_dir = os.getcwd()
         client_dir = os.path.join(base_dir, f"client_{n}")
         
+        # Detect Git branch from parent directory for addons cloning
+        git_branch = "main"  # default
+        try:
+            import subprocess as sp
+            result = sp.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], 
+                          cwd=base_dir, capture_output=True, text=True)
+            if result.returncode == 0:
+                git_branch = result.stdout.strip()
+        except Exception:
+            pass
+        
         if not os.path.exists(client_dir):
             os.makedirs(client_dir)
-            # Create necessary subdirectories
-            for subdir in ["plugins", "resources", "addons"]:
-                subdir_path = os.path.join(client_dir, subdir)
-                if not os.path.exists(subdir_path):
-                    os.makedirs(subdir_path)
             
             # Copy essential files/directories (or create symlinks on Unix)
             import shutil
@@ -127,13 +133,36 @@ for z in range(5):
             if os.path.exists(".env"):
                 shutil.copy(".env", os.path.join(client_dir, ".env"))
             
-            # For plugins, resources, addons - copy or symlink based on OS
+            # Create .git symlink or file pointing to parent repository
+            # This allows Git operations to work from client subdirectories
+            git_link = os.path.join(client_dir, ".git")
+            parent_git = os.path.join(base_dir, ".git")
+            if os.path.exists(parent_git) and not os.path.exists(git_link):
+                if platform.system() != "Windows":
+                    try:
+                        # Create symlink to parent .git directory
+                        os.symlink(os.path.abspath(parent_git), git_link)
+                    except (OSError, FileExistsError):
+                        # If symlink creation fails, create a gitdir file
+                        try:
+                            with open(git_link, "w") as f:
+                                f.write(f"gitdir: {os.path.abspath(parent_git)}\n")
+                        except Exception:
+                            pass
+                else:
+                    # On Windows, create a gitdir file
+                    try:
+                        with open(git_link, "w") as f:
+                            f.write(f"gitdir: {os.path.abspath(parent_git)}\n")
+                    except Exception:
+                        pass
+            
+            # For plugins, resources, addons - create symlinks (they should point to parent)
             for dir_name in ["plugins", "resources", "addons"]:
                 src = os.path.join(base_dir, dir_name)
                 dst = os.path.join(client_dir, dir_name)
                 if os.path.exists(src) and not os.path.exists(dst):
                     if platform.system() != "Windows":
-                        # Use symlink on Unix systems
                         try:
                             os.symlink(os.path.abspath(src), dst)
                         except OSError:
@@ -143,6 +172,16 @@ for z in range(5):
                         if os.path.isdir(src):
                             shutil.copytree(src, dst, dirs_exist_ok=True)
         
+        # Set Git environment variables to point to parent repository
+        # This ensures Git operations work even from client subdirectories
+        git_dir = os.path.join(base_dir, ".git")
+        if os.path.exists(git_dir):
+            env["GIT_DIR"] = os.path.abspath(git_dir)
+            env["GIT_WORK_TREE"] = os.path.abspath(base_dir)
+        
+        # Set Git branch as environment variable (fallback)
+        env["ULTR_REPO_BRANCH"] = git_branch
+        
         # Set PYTHONPATH to include the base directory so pyUltroid can be found
         pythonpath = env.get("PYTHONPATH", "")
         if pythonpath:
@@ -150,9 +189,72 @@ for z in range(5):
         else:
             env["PYTHONPATH"] = base_dir
         
+        # Create a wrapper script that patches Git Repo detection to use parent directory
+        wrapper_script = os.path.join(client_dir, f"_client_{n}_wrapper.py")
+        if not os.path.exists(wrapper_script):
+            # Escape the base_dir path for use in Python string
+            base_dir_escaped = base_dir.replace("\\", "\\\\").replace('"', '\\"')
+            wrapper_content = '''#!/usr/bin/env python3
+"""Wrapper script to patch Git repository detection for client {n}"""
+import os
+import sys
+
+# Add parent directory to path first
+base_dir = r"{base_dir_escaped}"
+sys.path.insert(0, base_dir)
+
+# Patch git.Repo BEFORE any other imports that might use it
+try:
+    # Import git module early and patch Repo class
+    import git
+    from git.exc import InvalidGitRepositoryError
+    
+    OriginalRepo = git.Repo
+    
+    class PatchedRepo(OriginalRepo):
+        """Patched Repo that falls back to parent directory"""
+        def __init__(self, path=None, *args, **kwargs):
+            if path is None:
+                # Try current directory first
+                try:
+                    super().__init__(path=".", *args, **kwargs)
+                    return
+                except InvalidGitRepositoryError:
+                    # Fall back to parent directory
+                    super().__init__(path=base_dir, *args, **kwargs)
+            else:
+                super().__init__(path=path, *args, **kwargs)
+    
+    # Replace Repo class in git module
+    git.Repo = PatchedRepo
+    
+except Exception as e:
+    # If patching fails, continue anyway
+    import warnings
+    warnings.warn(f"Could not patch Git Repo: {{e}}")
+
+# Now run pyUltroid (it will use the patched Repo)
+if __name__ == "__main__":
+    sys.argv = ["pyUltroid", "{out[0]}", "{out[1]}", "{out[2]}", "", "", "{n}"]
+    from pyUltroid.__main__ import main
+    main()
+'''.format(
+                n=n,
+                base_dir_escaped=base_dir_escaped,
+                out0=out[0],
+                out1=out[1],
+                out2=out[2]
+            )
+            with open(wrapper_script, "w", encoding="utf-8") as f:
+                f.write(wrapper_content)
+            # Make executable on Unix
+            import platform
+            if platform.system() != "Windows":
+                os.chmod(wrapper_script, 0o755)
+        
         try:
             process = subprocess.Popen(
-                [sys.executable, "-m", "pyUltroid", out[0], out[1], out[2], "", "", n],
+                [sys.executable, wrapper_script],
                 stdin=None,
                 stderr=None,
                 stdout=None,
