@@ -168,32 +168,65 @@ for z in range(5):
                 except Exception:
                     pass
         
-        # For plugins, resources - ALWAYS ensure symlinks point to parent
-        for dir_name in ["plugins", "resources"]:
+        # For plugins, resources, assistant, strings - ALWAYS ensure directories are accessible
+        for dir_name in ["plugins", "resources", "assistant", "strings"]:
             src = os.path.join(base_dir, dir_name)
             dst = os.path.join(client_dir, dir_name)
-            if os.path.exists(src):
+            if os.path.exists(src) and os.path.isdir(src):
                 # Remove existing symlink or directory if it exists
                 if os.path.exists(dst) or os.path.islink(dst):
                     try:
                         if os.path.islink(dst):
                             os.unlink(dst)
                         elif os.path.isdir(dst):
-                            shutil.rmtree(dst)
-                    except Exception:
-                        pass
+                            # Check if it's actually a symlink that's broken
+                            if os.path.islink(dst):
+                                os.unlink(dst)
+                            else:
+                                shutil.rmtree(dst)
+                    except Exception as e:
+                        print(f"  → Warning: Could not remove {dst}: {e}")
                 
-                # Create symlink
-                if platform.system() != "Windows":
+                # For plugins, assistant, strings: Copy (not symlink) to ensure imports work correctly
+                # For resources: Use symlink (it's just data files)
+                if dir_name in ["plugins", "assistant", "strings"]:
+                    # Always copy plugins/assistant to ensure Python imports work correctly
+                    print(f"  → Copying {dir_name} directory...")
                     try:
-                        os.symlink(os.path.abspath(src), dst)
-                    except (OSError, FileExistsError):
-                        # If symlink fails, copy the directory
-                        shutil.copytree(src, dst, dirs_exist_ok=True)
+                        # Copy entire directory (destination already removed above)
+                        shutil.copytree(src, dst)
+                        print(f"  → {dir_name} directory copied successfully")
+                    except Exception as e:
+                        print(f"  → Error copying {dir_name}: {e}")
+                        # Try with dirs_exist_ok as fallback if directory still exists
+                        try:
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
+                            print(f"  → {dir_name} directory updated")
+                        except Exception as e2:
+                            print(f"  → Failed to copy {dir_name}: {e2}")
                 else:
-                    # Copy on Windows (symlinks need admin rights)
-                    if os.path.isdir(src):
+                    # Use symlink for resources
+                    if platform.system() != "Windows":
+                        try:
+                            os.symlink(os.path.abspath(src), dst)
+                        except (OSError, FileExistsError):
+                            # If symlink fails, copy
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
+                    else:
+                        # Copy on Windows
                         shutil.copytree(src, dst, dirs_exist_ok=True)
+                        
+            # Verify plugins directory has files
+            if dir_name == "plugins" and os.path.exists(dst):
+                try:
+                    plugin_files = [f for f in os.listdir(dst) if f.endswith('.py') and not f.startswith('__')]
+                    plugin_count = len(plugin_files)
+                    if plugin_count == 0:
+                        print(f"  → Warning: {dir_name} directory appears empty!")
+                    else:
+                        print(f"  → {dir_name}: {plugin_count} plugin files ready")
+                except Exception as e:
+                    print(f"  → Error checking {dir_name}: {e}")
         
         # For addons - if it exists in parent, symlink it; otherwise pyUltroid will clone it
         addons_src = os.path.join(base_dir, "addons")
