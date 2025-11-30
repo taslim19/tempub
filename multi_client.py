@@ -47,7 +47,47 @@ for z in range(5):
         
         # Create environment dict with variables for this client
         env = os.environ.copy()
-        env["MONGO_URI"] = out[3]  # MONGO_URI is passed via environment, not command line
+        
+        # Set unique database name for each client to avoid database locking issues
+        # Each client gets its own database: UltroidDB1, UltroidDB2, etc.
+        mongo_uri = out[3]
+        unique_db_name = f"UltroidDB{n}"
+        
+        # Parse and modify MongoDB URI to include unique database name
+        # Handle different URI formats: mongodb://, mongodb+srv://
+        from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+        
+        try:
+            parsed = urlparse(mongo_uri)
+            # Reconstruct with unique database name
+            # Path will be like '/dbname' or '/' 
+            if parsed.path and parsed.path != '/':
+                # Database already in path, replace it
+                new_path = f'/{unique_db_name}'
+            else:
+                # No database in path, add it
+                new_path = f'/{unique_db_name}'
+            
+            # Reconstruct URI
+            new_uri = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                new_path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment
+            ))
+            env["MONGO_URI"] = new_uri
+        except Exception:
+            # Fallback: simple string manipulation if parsing fails
+            mongo_uri_temp = mongo_uri.rstrip('/')
+            if '?' in mongo_uri_temp:
+                base, query = mongo_uri_temp.split('?', 1)
+                env["MONGO_URI"] = f"{base}/{unique_db_name}?{query}"
+            else:
+                env["MONGO_URI"] = f"{mongo_uri_temp}/{unique_db_name}"
+        
+        print(f"  → Database: {unique_db_name} (unique per client)")
         
         # Optional variables: LOG_CHANNEL and BOT_TOKEN (can have numbered variants)
         # Check for numbered variant first, then fallback to non-numbered
