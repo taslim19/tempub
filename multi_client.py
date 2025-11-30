@@ -123,54 +123,99 @@ for z in range(5):
             pass
         
         if not os.path.exists(client_dir):
-            os.makedirs(client_dir)
-            
-            # Copy essential files/directories (or create symlinks on Unix)
-            import shutil
-            import platform
-            
-            # Copy .env file
-            if os.path.exists(".env"):
-                shutil.copy(".env", os.path.join(client_dir, ".env"))
-            
-            # Create .git symlink or file pointing to parent repository
-            # This allows Git operations to work from client subdirectories
-            git_link = os.path.join(client_dir, ".git")
-            parent_git = os.path.join(base_dir, ".git")
-            if os.path.exists(parent_git) and not os.path.exists(git_link):
-                if platform.system() != "Windows":
-                    try:
-                        # Create symlink to parent .git directory
-                        os.symlink(os.path.abspath(parent_git), git_link)
-                    except (OSError, FileExistsError):
-                        # If symlink creation fails, create a gitdir file
-                        try:
-                            with open(git_link, "w") as f:
-                                f.write(f"gitdir: {os.path.abspath(parent_git)}\n")
-                        except Exception:
-                            pass
-                else:
-                    # On Windows, create a gitdir file
+            os.makedirs(client_dir, exist_ok=True)
+        
+        # Always ensure symlinks/directories are set up correctly (re-check on each run)
+        import shutil
+        import platform
+        
+        # Copy .env file if it doesn't exist in client directory or if parent .env is newer
+        env_file = os.path.join(client_dir, ".env")
+        if os.path.exists(".env"):
+            if not os.path.exists(env_file):
+                shutil.copy(".env", env_file)
+            else:
+                # Update if parent .env is newer
+                try:
+                    parent_mtime = os.path.getmtime(".env")
+                    client_mtime = os.path.getmtime(env_file)
+                    if parent_mtime > client_mtime:
+                        shutil.copy(".env", env_file)
+                except Exception:
+                    pass
+        
+        # Create .git symlink or file pointing to parent repository
+        # This allows Git operations to work from client subdirectories
+        git_link = os.path.join(client_dir, ".git")
+        parent_git = os.path.join(base_dir, ".git")
+        if os.path.exists(parent_git) and not os.path.exists(git_link):
+            if platform.system() != "Windows":
+                try:
+                    # Create symlink to parent .git directory
+                    os.symlink(os.path.abspath(parent_git), git_link)
+                except (OSError, FileExistsError):
+                    # If symlink creation fails, create a gitdir file
                     try:
                         with open(git_link, "w") as f:
                             f.write(f"gitdir: {os.path.abspath(parent_git)}\n")
                     except Exception:
                         pass
+            else:
+                # On Windows, create a gitdir file
+                try:
+                    with open(git_link, "w") as f:
+                        f.write(f"gitdir: {os.path.abspath(parent_git)}\n")
+                except Exception:
+                    pass
+        
+        # For plugins, resources - ALWAYS ensure symlinks point to parent
+        for dir_name in ["plugins", "resources"]:
+            src = os.path.join(base_dir, dir_name)
+            dst = os.path.join(client_dir, dir_name)
+            if os.path.exists(src):
+                # Remove existing symlink or directory if it exists
+                if os.path.exists(dst) or os.path.islink(dst):
+                    try:
+                        if os.path.islink(dst):
+                            os.unlink(dst)
+                        elif os.path.isdir(dst):
+                            shutil.rmtree(dst)
+                    except Exception:
+                        pass
+                
+                # Create symlink
+                if platform.system() != "Windows":
+                    try:
+                        os.symlink(os.path.abspath(src), dst)
+                    except (OSError, FileExistsError):
+                        # If symlink fails, copy the directory
+                        shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    # Copy on Windows (symlinks need admin rights)
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dst, dirs_exist_ok=True)
+        
+        # For addons - if it exists in parent, symlink it; otherwise pyUltroid will clone it
+        addons_src = os.path.join(base_dir, "addons")
+        addons_dst = os.path.join(client_dir, "addons")
+        if os.path.exists(addons_src) and os.path.isdir(addons_src):
+            if os.path.exists(addons_dst) or os.path.islink(addons_dst):
+                try:
+                    if os.path.islink(addons_dst):
+                        os.unlink(addons_dst)
+                    elif os.path.isdir(addons_dst):
+                        shutil.rmtree(addons_dst)
+                except Exception:
+                    pass
             
-            # For plugins, resources, addons - create symlinks (they should point to parent)
-            for dir_name in ["plugins", "resources", "addons"]:
-                src = os.path.join(base_dir, dir_name)
-                dst = os.path.join(client_dir, dir_name)
-                if os.path.exists(src) and not os.path.exists(dst):
-                    if platform.system() != "Windows":
-                        try:
-                            os.symlink(os.path.abspath(src), dst)
-                        except OSError:
-                            shutil.copytree(src, dst, dirs_exist_ok=True)
-                    else:
-                        # Copy on Windows
-                        if os.path.isdir(src):
-                            shutil.copytree(src, dst, dirs_exist_ok=True)
+            if platform.system() != "Windows":
+                try:
+                    os.symlink(os.path.abspath(addons_src), addons_dst)
+                except (OSError, FileExistsError):
+                    pass
+            else:
+                if os.path.isdir(addons_src):
+                    shutil.copytree(addons_src, addons_dst, dirs_exist_ok=True)
         
         # Set Git environment variables to point to parent repository
         # This ensures Git operations work even from client subdirectories
