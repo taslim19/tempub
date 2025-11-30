@@ -88,6 +88,7 @@ for z in range(5):
                 env["MONGO_URI"] = f"{mongo_uri_temp}/{unique_db_name}"
         
         print(f"  → Database: {unique_db_name} (unique per client)")
+        print(f"  → Working directory: client_{n}/ (isolated session files)")
         
         # Optional variables: LOG_CHANNEL and BOT_TOKEN (can have numbered variants)
         # Check for numbered variant first, then fallback to non-numbered
@@ -105,13 +106,57 @@ for z in range(5):
         
         print(f"  → Starting Client {n}...")
         
+        # Create unique working directory for each client to avoid SQLite session file conflicts
+        # Each client will have its own session files (asst.session, etc.) in its own directory
+        base_dir = os.getcwd()
+        client_dir = os.path.join(base_dir, f"client_{n}")
+        
+        if not os.path.exists(client_dir):
+            os.makedirs(client_dir)
+            # Create necessary subdirectories
+            for subdir in ["plugins", "resources", "addons"]:
+                subdir_path = os.path.join(client_dir, subdir)
+                if not os.path.exists(subdir_path):
+                    os.makedirs(subdir_path)
+            
+            # Copy essential files/directories (or create symlinks on Unix)
+            import shutil
+            import platform
+            
+            # Copy .env file
+            if os.path.exists(".env"):
+                shutil.copy(".env", os.path.join(client_dir, ".env"))
+            
+            # For plugins, resources, addons - copy or symlink based on OS
+            for dir_name in ["plugins", "resources", "addons"]:
+                src = os.path.join(base_dir, dir_name)
+                dst = os.path.join(client_dir, dir_name)
+                if os.path.exists(src) and not os.path.exists(dst):
+                    if platform.system() != "Windows":
+                        # Use symlink on Unix systems
+                        try:
+                            os.symlink(os.path.abspath(src), dst)
+                        except OSError:
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
+                    else:
+                        # Copy on Windows
+                        if os.path.isdir(src):
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
+        
+        # Set PYTHONPATH to include the base directory so pyUltroid can be found
+        pythonpath = env.get("PYTHONPATH", "")
+        if pythonpath:
+            env["PYTHONPATH"] = f"{base_dir}{os.pathsep}{pythonpath}"
+        else:
+            env["PYTHONPATH"] = base_dir
+        
         try:
             process = subprocess.Popen(
                 [sys.executable, "-m", "pyUltroid", out[0], out[1], out[2], "", "", n],
                 stdin=None,
                 stderr=None,
                 stdout=None,
-                cwd=None,
+                cwd=os.path.abspath(client_dir),  # Run each client in its own directory
                 env=env,
             )
             started_clients.append((n, process.pid))
