@@ -303,7 +303,8 @@ if os.path.exists(plugins_src):
                 shutil.rmtree(plugins_dir)
                 shutil.copytree(plugins_src, plugins_dir)
             else:
-                print(f"[Client {n}] Plugins directory verified ({{{{len(plugin_files)}}}} files)")
+                plugin_count = len(plugin_files)
+                print(f"[Client {n}] Plugins directory verified (" + str(plugin_count) + " files)")
         except Exception as e:
             print(f"[Client {n}] Error checking plugins: {{{{e}}}}, recopying...")
             if os.path.exists(plugins_dir):
