@@ -95,6 +95,12 @@ def start_client(client_num):
     
     env["PYTHONPATH"] = base_dir
     
+    # Note: The .restart command will work correctly because:
+    # - Working directory (client_dir) is preserved by os.execl()
+    # - Environment variables (PYTHONPATH, MONGO_URI, etc.) are preserved
+    # - sys.argv arguments (API_ID, API_HASH, SESSION) are preserved
+    # The restart function in pyUltroid/fns/helper.py handles this automatically
+    
     try:
         proc = subprocess.Popen(
             [sys.executable, "-m", "pyUltroid", api_id, api_hash, session, "", ""],
