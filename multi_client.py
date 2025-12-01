@@ -267,19 +267,45 @@ for z in range(5):
         else:
             env["PYTHONPATH"] = base_dir
         
-        # Create a wrapper script that patches Git Repo detection to use parent directory
+        # Create a wrapper script that patches Git Repo detection and ensures directories exist
+        # Always recreate wrapper to ensure it's up to date
         wrapper_script = os.path.join(client_dir, f"_client_{n}_wrapper.py")
-        if not os.path.exists(wrapper_script):
             # Escape the base_dir path for use in Python string
             base_dir_escaped = base_dir.replace("\\", "\\\\").replace('"', '\\"')
             wrapper_content = '''#!/usr/bin/env python3
-"""Wrapper script to patch Git repository detection for client {n}"""
+"""Wrapper script to patch Git repository detection and ensure directories exist for client {n}"""
 import os
 import sys
+import shutil
 
 # Add parent directory to path first
 base_dir = r"{base_dir_escaped}"
+client_dir = os.getcwd()  # We're running from client directory
 sys.path.insert(0, base_dir)
+
+# CRITICAL: Ensure plugins directory exists BEFORE importing pyUltroid
+# pyUltroid checks for ./plugins at import time in __init__.py
+plugins_dir = os.path.join(client_dir, "plugins")
+if not os.path.exists(plugins_dir):
+    plugins_src = os.path.join(base_dir, "plugins")
+    if os.path.exists(plugins_src):
+        print(f"[Client {n}] Setting up plugins directory...")
+        shutil.copytree(plugins_src, plugins_dir)
+        print(f"[Client {n}] Plugins directory ready")
+
+# Ensure assistant directory exists
+assistant_dir = os.path.join(client_dir, "assistant")
+if not os.path.exists(assistant_dir):
+    assistant_src = os.path.join(base_dir, "assistant")
+    if os.path.exists(assistant_src):
+        shutil.copytree(assistant_src, assistant_dir)
+
+# Ensure strings directory exists
+strings_dir = os.path.join(client_dir, "strings")
+if not os.path.exists(strings_dir):
+    strings_src = os.path.join(base_dir, "strings")
+    if os.path.exists(strings_src):
+        shutil.copytree(strings_src, strings_dir)
 
 # Patch git.Repo BEFORE any other imports that might use it
 try:
@@ -311,7 +337,7 @@ except Exception as e:
     import warnings
     warnings.warn(f"Could not patch Git Repo: {{e}}")
 
-# Now run pyUltroid (it will use the patched Repo)
+# Now run pyUltroid (it will use the patched Repo and find plugins)
 if __name__ == "__main__":
     sys.argv = ["pyUltroid", "{out0}", "{out1}", "{out2}", "", "", "{n}"]
     from pyUltroid.__main__ import main
