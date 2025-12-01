@@ -12,6 +12,9 @@ from telethon.errors import (
 )
 
 from . import LOG_CHANNEL, LOGS, Button, asst, eor, get_string, ultroid_cmd
+from pyUltroid.fns.helper import time_formatter
+from pyUltroid import start_time
+import time
 
 REPOMSG = """
 • **ULTROID USERBOT** •\n
@@ -64,3 +67,13 @@ async def useUltroid(rs):
     )
     if not (rs.chat_id == LOG_CHANNEL and rs.client._bot):
         await eor(rs, f"**[Click Here]({msg.message_link})**")
+
+
+@ultroid_cmd(pattern="ping$")
+async def ping_handler(event):
+    """Calculate ping and show uptime"""
+    start = time.time()
+    uptime = time_formatter((time.time() - start_time) * 1000)
+    end = time.time()
+    ms = round((end - start) * 1000, 2)
+    await eor(event, get_string("ping").format(ms, uptime))
