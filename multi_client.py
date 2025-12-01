@@ -303,14 +303,14 @@ if os.path.exists(plugins_src):
                 shutil.rmtree(plugins_dir)
                 shutil.copytree(plugins_src, plugins_dir)
             else:
-                print(f"[Client {n}] Plugins directory verified ({len(plugin_files)} files)")
+                print(f"[Client {n}] Plugins directory verified ({{{{len(plugin_files)}}}} files)")
         except Exception as e:
-            print(f"[Client {n}] Error checking plugins: {{e}}, recopying...")
+            print(f"[Client {n}] Error checking plugins: {{{{e}}}}, recopying...")
             if os.path.exists(plugins_dir):
                 shutil.rmtree(plugins_dir)
             shutil.copytree(plugins_src, plugins_dir)
 else:
-    print(f"[Client {n}] WARNING: Source plugins directory not found at {{plugins_src}}")
+    print(f"[Client {n}] WARNING: Source plugins directory not found at {{{{plugins_src}}}}")
 
 # Ensure assistant directory exists
 assistant_dir = os.path.join(client_dir, "assistant")
@@ -354,7 +354,7 @@ try:
 except Exception as e:
     # If patching fails, continue anyway
     import warnings
-    warnings.warn(f"Could not patch Git Repo: {{e}}")
+    warnings.warn(f"Could not patch Git Repo: {{{{e}}}}")
 
 # Now run pyUltroid (it will use the patched Repo and find plugins)
 if __name__ == "__main__":
