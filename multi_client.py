@@ -362,18 +362,18 @@ if __name__ == "__main__":
     from pyUltroid.__main__ import main
     main()
 '''.format(
-                n=n,
-                base_dir_escaped=base_dir_escaped,
-                out0=out[0],
-                out1=out[1],
-                out2=out[2]
-            )
-            with open(wrapper_script, "w", encoding="utf-8") as f:
-                f.write(wrapper_content)
-            # Make executable on Unix
-            import platform
-            if platform.system() != "Windows":
-                os.chmod(wrapper_script, 0o755)
+            n=n,
+            base_dir_escaped=base_dir_escaped,
+            out0=out[0],
+            out1=out[1],
+            out2=out[2]
+        )
+        with open(wrapper_script, "w", encoding="utf-8") as f:
+            f.write(wrapper_content)
+        # Make executable on Unix
+        import platform
+        if platform.system() != "Windows":
+            os.chmod(wrapper_script, 0o755)
         
         try:
             process = subprocess.Popen(
