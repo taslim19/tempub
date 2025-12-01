@@ -580,21 +580,21 @@ async def restart(ult=None):
                 )
             LOGS.exception(er)
     else:
+        # Preserve current working directory for multi-client setup
+        # os.execl() preserves the working directory, so we stay in client_N/ if that's where we are
+        # PYTHONPATH is set in the environment, so pyUltroid can be imported from anywhere
+        
         if len(sys.argv) == 1:
             os.execl(sys.executable, sys.executable, "-m", "pyUltroid")
         else:
-            os.execl(
-                sys.executable,
-                sys.executable,
-                "-m",
-                "pyUltroid",
-                sys.argv[1],
-                sys.argv[2],
-                sys.argv[3],
-                sys.argv[4],
-                sys.argv[5],
-                sys.argv[6],
-            )
+            # Preserve all sys.argv arguments (API_ID, API_HASH, SESSION, etc.)
+            args = [sys.executable, sys.executable, "-m", "pyUltroid"]
+            for i in range(1, min(len(sys.argv), 7)):
+                args.append(sys.argv[i])
+            # Pad with empty strings if needed (pyUltroid expects 6 args total)
+            while len(args) < 8:
+                args.append("")
+            os.execl(*args)
 
 
 async def shutdown(ult):

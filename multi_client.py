@@ -282,6 +282,7 @@ import shutil
 base_dir = r"{base_dir_escaped}"
 client_dir = os.getcwd()  # We're running from client directory
 sys.path.insert(0, base_dir)
+sys.path.insert(0, client_dir)  # Also add client directory for addons imports
 
 # CRITICAL: Ensure plugins directory exists BEFORE importing pyUltroid
 # pyUltroid checks for ./plugins at import time in __init__.py

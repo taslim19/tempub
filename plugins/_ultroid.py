@@ -12,7 +12,7 @@ from telethon.errors import (
 )
 
 from . import LOG_CHANNEL, LOGS, Button, asst, eor, get_string, ultroid_cmd
-from pyUltroid.fns.helper import time_formatter
+from pyUltroid.fns.helper import time_formatter, restart, shutdown
 from pyUltroid import start_time
 import time
 
@@ -77,3 +77,17 @@ async def ping_handler(event):
     end = time.time()
     ms = round((end - start) * 1000, 2)
     await eor(event, get_string("ping").format(ms, uptime))
+
+
+@ultroid_cmd(pattern="restart$", fullsudo=True)
+async def restart_handler(event):
+    """Restart the bot"""
+    await eor(event, "`Restarting...`")
+    await restart(event)
+
+
+@ultroid_cmd(pattern="shutdown$", fullsudo=True)
+async def shutdown_handler(event):
+    """Shutdown the bot"""
+    await eor(event, "`Shutting down...`")
+    await shutdown(event)
