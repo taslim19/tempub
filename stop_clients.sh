@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to stop multi_client.py and all Ultroid clients
+# Script to stop multi_client_v2.py and all Ultroid clients
 
 echo "Stopping multi-client launcher and clients..."
 

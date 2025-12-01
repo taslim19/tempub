@@ -1,8 +1,8 @@
 #!/bin/bash
-# Script to start multi_client.py in the background
+# Script to start multi_client_v2.py in the background
 
-echo "Starting multi_client.py in background..."
-nohup python3 multi_client.py > multi_client.log 2>&1 &
+echo "Starting multi_client_v2.py in background..."
+nohup python3 multi_client_v2.py > multi_client.log 2>&1 &
 echo $! > multi_client.pid
 
 echo "✓ Multi-client launcher started in background!"

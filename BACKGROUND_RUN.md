@@ -4,7 +4,7 @@
 
 ```bash
 # Start in background
-nohup python3 multi_client.py > multi_client.log 2>&1 &
+nohup python3 multi_client_v2.py > multi_client.log 2>&1 &
 
 # Or use the helper script
 chmod +x start_background.sh
@@ -14,7 +14,7 @@ chmod +x start_background.sh
 **To stop:**
 ```bash
 # Find and kill the process
-pkill -f multi_client.py
+pkill -f multi_client_v2.py
 
 # Or use the stop script
 chmod +x stop_clients.sh
@@ -40,7 +40,7 @@ sudo yum install screen      # CentOS/RHEL
 screen -S ultroid
 
 # Run the launcher
-python3 multi_client.py
+python3 multi_client_v2.py
 
 # Detach: Press Ctrl+A then D
 # Reattach: screen -r ultroid
@@ -60,7 +60,7 @@ sudo apt-get install tmux
 tmux new -s ultroid
 
 # Run the launcher
-python3 multi_client.py
+python3 multi_client_v2.py
 
 # Detach: Press Ctrl+B then D
 # Reattach: tmux attach -t ultroid
@@ -83,7 +83,7 @@ After=network.target
 Type=simple
 User=your_username
 WorkingDirectory=/path/to/tempub
-ExecStart=/usr/bin/python3 /path/to/tempub/multi_client.py
+ExecStart=/usr/bin/python3 /path/to/tempub/multi_client_v2.py
 Restart=always
 RestartSec=10
 StandardOutput=append:/path/to/tempub/multi_client.log
@@ -124,7 +124,7 @@ The script can be modified to daemonize itself, but the above methods are simple
 
 ### Check if running:
 ```bash
-ps aux | grep multi_client.py
+ps aux | grep multi_client_v2.py
 ps aux | grep pyUltroid
 ```
 
@@ -136,7 +136,7 @@ pgrep -f pyUltroid
 ### Stop all Ultroid processes:
 ```bash
 pkill -f pyUltroid
-pkill -f multi_client.py
+pkill -f multi_client_v2.py
 ```
 
 ### View logs:
