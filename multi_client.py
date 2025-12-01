@@ -286,12 +286,31 @@ sys.path.insert(0, base_dir)
 # CRITICAL: Ensure plugins directory exists BEFORE importing pyUltroid
 # pyUltroid checks for ./plugins at import time in __init__.py
 plugins_dir = os.path.join(client_dir, "plugins")
-if not os.path.exists(plugins_dir):
-    plugins_src = os.path.join(base_dir, "plugins")
-    if os.path.exists(plugins_src):
-        print(f"[Client {n}] Setting up plugins directory...")
+plugins_src = os.path.join(base_dir, "plugins")
+
+# Always ensure plugins directory is set up correctly
+if os.path.exists(plugins_src):
+    if not os.path.exists(plugins_dir):
+        print(f"[Client {n}] Copying plugins directory...")
         shutil.copytree(plugins_src, plugins_dir)
-        print(f"[Client {n}] Plugins directory ready")
+    else:
+        # Verify plugins directory has files
+        try:
+            plugin_files = [f for f in os.listdir(plugins_dir) if f.endswith('.py') and not f.startswith('__')]
+            if len(plugin_files) == 0:
+                # Directory exists but is empty, recopy
+                print(f"[Client {n}] Plugins directory empty, recopying...")
+                shutil.rmtree(plugins_dir)
+                shutil.copytree(plugins_src, plugins_dir)
+            else:
+                print(f"[Client {n}] Plugins directory verified ({len(plugin_files)} files)")
+        except Exception as e:
+            print(f"[Client {n}] Error checking plugins: {{e}}, recopying...")
+            if os.path.exists(plugins_dir):
+                shutil.rmtree(plugins_dir)
+            shutil.copytree(plugins_src, plugins_dir)
+else:
+    print(f"[Client {n}] WARNING: Source plugins directory not found at {{plugins_src}}")
 
 # Ensure assistant directory exists
 assistant_dir = os.path.join(client_dir, "assistant")
