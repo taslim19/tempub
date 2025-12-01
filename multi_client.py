@@ -270,9 +270,9 @@ for z in range(5):
         # Create a wrapper script that patches Git Repo detection and ensures directories exist
         # Always recreate wrapper to ensure it's up to date
         wrapper_script = os.path.join(client_dir, f"_client_{n}_wrapper.py")
-            # Escape the base_dir path for use in Python string
-            base_dir_escaped = base_dir.replace("\\", "\\\\").replace('"', '\\"')
-            wrapper_content = '''#!/usr/bin/env python3
+        # Escape the base_dir path for use in Python string
+        base_dir_escaped = base_dir.replace("\\", "\\\\").replace('"', '\\"')
+        wrapper_content = '''#!/usr/bin/env python3
 """Wrapper script to patch Git repository detection and ensure directories exist for client {n}"""
 import os
 import sys
