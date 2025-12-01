@@ -13,23 +13,34 @@ start_client() {
     local suffix=""
     [ $num -gt 1 ] && suffix=$((num-1))
     
+    # Use indirect variable expansion for numbered variables
+    local api_id_var="API_ID$suffix"
+    local api_hash_var="API_HASH$suffix"
+    local session_var="SESSION$suffix"
+    local mongo_uri_var="MONGO_URI$suffix"
+    
+    local api_id_val="${!api_id_var:-$API_ID}"
+    local api_hash_val="${!api_hash_var:-$API_HASH}"
+    local session_val="${!session_var:-$SESSION}"
+    local mongo_uri_val="${!mongo_uri_var:-$MONGO_URI}"
+    
     # Check if required vars exist
-    if [ -z "${API_ID${suffix}}" ] && [ -z "$API_ID" ]; then
+    if [ -z "$api_id_val" ]; then
         echo "✗ Client $num: Skipped (missing API_ID)"
         return 1
     fi
     
-    if [ -z "${API_HASH${suffix}}" ] && [ -z "$API_HASH" ]; then
+    if [ -z "$api_hash_val" ]; then
         echo "✗ Client $num: Skipped (missing API_HASH)"
         return 1
     fi
     
-    if [ -z "${SESSION${suffix}}" ] && [ -z "$SESSION" ]; then
+    if [ -z "$session_val" ]; then
         echo "✗ Client $num: Skipped (missing SESSION)"
         return 1
     fi
     
-    if [ -z "${MONGO_URI${suffix}}" ] && [ -z "$MONGO_URI" ]; then
+    if [ -z "$mongo_uri_val" ]; then
         echo "✗ Client $num: Skipped (missing MONGO_URI)"
         return 1
     fi
@@ -51,25 +62,33 @@ start_client() {
     # Copy .env if exists
     [ -f ../.env ] && cp ../.env .env
     
+    # Set PYTHONPATH to parent directory so pyUltroid can be found
+    export PYTHONPATH="$(cd .. && pwd):${PYTHONPATH:-}"
+    
     # Set environment variables
-    export API_ID="${API_ID${suffix}:-$API_ID}"
-    export API_HASH="${API_HASH${suffix}:-$API_HASH}"
-    export SESSION="${SESSION${suffix}:-$SESSION}"
+    export API_ID="$api_id_val"
+    export API_HASH="$api_hash_val"
+    export SESSION="$session_val"
     
     # Unique database
     DB_NAME="UltroidDB$num"
-    if [[ "${MONGO_URI${suffix}:-$MONGO_URI}" == */ ]]; then
-        export MONGO_URI="${MONGO_URI${suffix}:-$MONGO_URI}$DB_NAME"
+    if [[ "$mongo_uri_val" == */ ]]; then
+        export MONGO_URI="${mongo_uri_val}$DB_NAME"
     else
-        export MONGO_URI="${MONGO_URI${suffix}:-$MONGO_URI}/$DB_NAME"
+        export MONGO_URI="${mongo_uri_val}/$DB_NAME"
     fi
     
-    # Optional vars
-    [ -n "${LOG_CHANNEL${suffix}}" ] && export LOG_CHANNEL="${LOG_CHANNEL${suffix}}"
-    [ -n "${BOT_TOKEN${suffix}}" ] && export BOT_TOKEN="${BOT_TOKEN${suffix}}"
+    # Optional vars (use indirect expansion)
+    local log_channel_var="LOG_CHANNEL$suffix"
+    local bot_token_var="BOT_TOKEN$suffix"
+    local log_channel_val="${!log_channel_var:-$LOG_CHANNEL}"
+    local bot_token_val="${!bot_token_var:-$BOT_TOKEN}"
     
-    # Start in background
-    nohup python3 -m pyUltroid > "../client_${num}.log" 2>&1 &
+    [ -n "$log_channel_val" ] && export LOG_CHANNEL="$log_channel_val"
+    [ -n "$bot_token_val" ] && export BOT_TOKEN="$bot_token_val"
+    
+    # Start in background with arguments
+    nohup python3 -m pyUltroid "$api_id_val" "$api_hash_val" "$session_val" "" "" > "../client_${num}.log" 2>&1 &
     CLIENT_PID=$!
     
     echo "  → Client $num started (PID: $CLIENT_PID)"
