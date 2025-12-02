@@ -312,9 +312,11 @@ def start_web_api(port=8000, api_key=None):
             configured_clients = set()
             try:
                 from dotenv import load_dotenv
+                # Try to load .env from base directory
                 env_file = os.path.join(base_dir, ".env")
                 if os.path.exists(env_file):
-                    load_dotenv(env_file)
+                    # Load .env but don't override existing env vars
+                    load_dotenv(env_file, override=False)
                 
                 required_vars = ["API_ID", "API_HASH", "SESSION", "MONGO_URI"]
                 for i in range(1, 6):
@@ -322,16 +324,21 @@ def start_web_api(port=8000, api_key=None):
                     has_all = True
                     for var in required_vars:
                         var_name = var + suffix
-                        if not os.environ.get(var_name):
+                        # Check numbered variable first, then fallback to base variable
+                        value = os.environ.get(var_name)
+                        if not value and suffix:
+                            # For clients 2-5, also check base variable as fallback
+                            value = os.environ.get(var)
+                        if not value:
                             has_all = False
                             break
                     if has_all:
                         configured_clients.add(i)
-            except:
-                # If we can't check, show all clients that are running or have directories
-                pass
+            except Exception as e:
+                # If we can't check, show all running clients
+                LOGS.debug(f"Could not check client configuration: {e}")
 
-            # Only show clients that have configuration OR are running
+            # Show clients that are running OR have configuration
             for i in range(1, 6):
                 client_dir = os.path.join(base_dir, f"client_{i}")
                 pid_file = os.path.join(base_dir, f"client_{i}.pid")
@@ -366,9 +373,13 @@ def start_web_api(port=8000, api_key=None):
                     except Exception:
                         pass
 
-                # Only include clients that have configuration (don't show unconfigured clients even if running)
-                if configured_clients and i not in configured_clients:
-                    continue  # Skip clients without configuration
+                # Show clients that are running OR have configuration
+                # Don't show clients that are stopped AND don't have configuration
+                if not is_running:
+                    # If not running, only show if it has configuration
+                    if configured_clients and i not in configured_clients:
+                        continue  # Skip stopped clients without configuration
+                # If running, always show (even if config check failed)
                 
                 clients.append({
                     "id": i,
