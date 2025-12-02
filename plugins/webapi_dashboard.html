@@ -511,6 +511,12 @@
                     }
 
                     const html = `
+                        ${data.client_id ? `
+                        <div class="stat-item">
+                            <span class="stat-label">Client Instance</span>
+                            <span class="stat-value">Client ${data.client_id}</span>
+                        </div>
+                        ` : ''}
                         <div class="stat-item">
                             <span class="stat-label">Status</span>
                             <span class="stat-value" style="color: ${data.status === 'online' ? 'var(--success)' : 'var(--error)'}">

@@ -88,11 +88,53 @@ def start_web_api(port=8000, api_key=None):
 
     @app.get("/api/stats")
     async def get_stats(api_key: str = Depends(verify_api_key)):
-        """Get bot statistics"""
+        """Get bot statistics - shows stats for current client instance"""
         try:
             from pyUltroid import ultroid_bot, start_time
             import psutil
             import os
+
+            # Detect which client instance this webapi is running in
+            current_client_id = None
+            cwd = os.getcwd()
+            if 'client_' in cwd:
+                try:
+                    current_client_id = int(cwd.split('client_')[-1].split(os.sep)[0])
+                except:
+                    pass
+            
+            # If not in client directory, try to detect from PID
+            if current_client_id is None:
+                base_dir = os.path.dirname(cwd) if 'client_' in cwd else cwd
+                current_pid = os.getpid()
+                try:
+                    import psutil
+                    current_proc = psutil.Process(current_pid)
+                    parent_pid = current_proc.ppid()
+                except:
+                    parent_pid = None
+                
+                for i in range(1, 6):
+                    pid_file = os.path.join(base_dir, f"client_{i}.pid")
+                    if os.path.exists(pid_file):
+                        try:
+                            with open(pid_file, 'r') as f:
+                                pid = int(f.read().strip())
+                            # Check if current process or parent matches
+                            if current_pid == pid or (parent_pid and parent_pid == pid):
+                                current_client_id = i
+                                break
+                            # Also check if we're a child of this process
+                            if parent_pid:
+                                try:
+                                    parent_proc = psutil.Process(parent_pid)
+                                    if parent_proc.pid == pid:
+                                        current_client_id = i
+                                        break
+                                except:
+                                    pass
+                        except:
+                            pass
 
             uptime_seconds = int(time.time() - start_time)
             uptime_formatted = format_uptime(uptime_seconds)
@@ -112,14 +154,28 @@ def start_web_api(port=8000, api_key=None):
             except ImportError:
                 pass  # psutil not installed, skip system stats
 
+            # Get bot info
+            bot_info = {}
+            try:
+                if ultroid_bot and ultroid_bot.me:
+                    bot_info = {
+                        "user_id": ultroid_bot.uid if hasattr(ultroid_bot, 'uid') else None,
+                        "username": ultroid_bot.me.username if hasattr(ultroid_bot.me, 'username') else None,
+                        "first_name": ultroid_bot.me.first_name if hasattr(ultroid_bot.me, 'first_name') else None,
+                        "is_bot": ultroid_bot.me.bot if hasattr(ultroid_bot.me, 'bot') else None,
+                    }
+            except:
+                pass
+
             stats = {
                 "status": "online",
+                "client_id": current_client_id,
                 "uptime_seconds": uptime_seconds,
                 "uptime_formatted": uptime_formatted,
-                "user_id": ultroid_bot.uid if hasattr(ultroid_bot, 'uid') else None,
-                "username": ultroid_bot.me.username if (ultroid_bot.me and hasattr(ultroid_bot.me, 'username')) else None,
-                "first_name": ultroid_bot.me.first_name if (ultroid_bot.me and hasattr(ultroid_bot.me, 'first_name')) else None,
-                "is_bot": ultroid_bot.me.bot if (ultroid_bot.me and hasattr(ultroid_bot.me, 'bot')) else None,
+                "user_id": bot_info.get("user_id"),
+                "username": bot_info.get("username"),
+                "first_name": bot_info.get("first_name"),
+                "is_bot": bot_info.get("is_bot"),
                 "system": system_stats
             }
             return stats
@@ -180,19 +236,79 @@ def start_web_api(port=8000, api_key=None):
             except ImportError:
                 has_psutil = False
 
+            # First, find all running pyUltroid processes and map them to clients
+            running_processes = {}
+            if has_psutil:
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cwd', 'cpu_percent', 'memory_info']):
+                    try:
+                        cmdline = proc.info.get('cmdline', [])
+                        if cmdline and any('pyUltroid' in str(arg) for arg in cmdline):
+                            cwd = proc.info.get('cwd', '')
+                            pid = proc.info['pid']
+                            
+                            # Try to determine which client this is
+                            client_id = None
+                            
+                            # Method 1: Check if cwd is in a client_N directory
+                            if 'client_' in cwd:
+                                try:
+                                    client_id = int(cwd.split('client_')[-1].split(os.sep)[0])
+                                except:
+                                    pass
+                            
+                            # Method 2: Check PID files
+                            if client_id is None:
+                                for i in range(1, 6):
+                                    pid_file = os.path.join(base_dir, f"client_{i}.pid")
+                                    if os.path.exists(pid_file):
+                                        try:
+                                            with open(pid_file, 'r') as f:
+                                                if int(f.read().strip()) == pid:
+                                                    client_id = i
+                                                    break
+                                        except:
+                                            pass
+                            
+                            # Method 3: If we can't determine, assign to first available
+                            if client_id is None:
+                                for i in range(1, 6):
+                                    if i not in running_processes:
+                                        client_id = i
+                                        break
+                            
+                            if client_id:
+                                try:
+                                    proc_obj = psutil.Process(pid)
+                                    running_processes[client_id] = {
+                                        'pid': pid,
+                                        'cpu': proc_obj.cpu_percent(interval=0.1),
+                                        'mem': proc_obj.memory_info().rss / 1024 / 1024
+                                    }
+                                except:
+                                    pass
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+
             # Show all 5 clients regardless of whether directories exist
             for i in range(1, 6):
                 client_dir = os.path.join(base_dir, f"client_{i}")
                 pid_file = os.path.join(base_dir, f"client_{i}.pid")
+                has_directory = os.path.exists(client_dir)
                 
-                # Check if process is running
+                # Check if we found this client in running processes
                 is_running = False
                 pid = None
                 cpu = 0
                 mem = 0
-                has_directory = os.path.exists(client_dir)
-
-                if os.path.exists(pid_file):
+                
+                if i in running_processes:
+                    # Found via process scanning
+                    is_running = True
+                    pid = running_processes[i]['pid']
+                    cpu = running_processes[i]['cpu']
+                    mem = running_processes[i]['mem']
+                elif os.path.exists(pid_file):
+                    # Fallback: check PID file
                     try:
                         with open(pid_file, 'r') as f:
                             pid = int(f.read().strip())
