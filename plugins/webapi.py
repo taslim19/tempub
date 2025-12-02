@@ -17,10 +17,14 @@
 • `{i}webapi status`
     Check web server status.
 
+• `{i}webapi autostart on/off`
+    Enable/disable auto-start on bot startup (enabled by default).
+
 Setup:
 1. Install FastAPI: pip install fastapi uvicorn python-multipart
 2. Set WEB_API_PORT in .env (default: 8000)
 3. Set WEB_API_KEY in .env for authentication (optional)
+4. Web API starts automatically on bot startup (use .webapi autostart off to disable)
 """
 
 from . import LOGS, eor, get_string, udB, ultroid_cmd
@@ -347,10 +351,17 @@ async def webapi_status(event):
 
     status = "running" if _web_server else "stopped"
     
+    auto_start_setting = udB.get_key("WEB_API_AUTO_START")
+    if auto_start_setting is False:
+        auto_start_status = "✗ Disabled"
+    else:
+        auto_start_status = "✓ Enabled (default)"
+    
     msg = (
         f"**Web API Status:** {status}\n"
         f"**Port:** {port}\n"
         f"**API Key:** {'✓ Set' if api_key else '✗ Not set'}\n"
+        f"**Auto-Start:** {auto_start_status}\n"
     )
     
     if _web_server:
@@ -359,4 +370,60 @@ async def webapi_status(event):
         msg += f"🔗 **Health:** http://localhost:{port}/health"
 
     await eor(event, msg)
+
+
+@ultroid_cmd(pattern="webapi autostart (on|off)$", fullsudo=True)
+async def webapi_autostart(event):
+    """Enable/disable auto-start of web API"""
+    mode = event.pattern_match.group(1)
+    
+    if mode == "on":
+        udB.set_key("WEB_API_AUTO_START", True)
+        await eor(event, "✓ Web API auto-start enabled. It will start automatically on bot startup.")
+    else:
+        udB.set_key("WEB_API_AUTO_START", False)
+        await eor(event, "✗ Web API auto-start disabled. Use `.webapi start` to start manually.")
+
+
+# Auto-start web API by default (unless explicitly disabled)
+def _auto_start_webapi():
+    """Auto-start web API on plugin load by default"""
+    try:
+        # Check if auto-start is explicitly disabled
+        auto_start_setting = udB.get_key("WEB_API_AUTO_START")
+        if auto_start_setting is False:
+            LOGS.info("Web API auto-start is disabled")
+            return
+        
+        # Don't start if already running
+        if _web_server:
+            return
+        
+        # Get configuration
+        port = int(udB.get_key("WEB_API_PORT") or os.getenv("WEB_API_PORT", "8000"))
+        api_key = udB.get_key("WEB_API_KEY") or os.getenv("WEB_API_KEY")
+        
+        # Start the server (starts by default)
+        success, message = start_web_api(port=port, api_key=api_key)
+        if success:
+            LOGS.info(f"Web API auto-started: {message}")
+        else:
+            LOGS.warning(f"Web API auto-start failed: {message}")
+    except Exception as e:
+        LOGS.exception(f"Error in webapi auto-start: {e}")
+
+
+# Start web API automatically when plugin loads (if enabled)
+# Use a small delay to ensure bot is fully initialized
+def _delayed_auto_start():
+    """Start web API after a short delay"""
+    time.sleep(5)  # Wait 5 seconds for bot to fully initialize
+    _auto_start_webapi()
+
+# Start auto-start thread
+try:
+    auto_start_thread = Thread(target=_delayed_auto_start, daemon=True, name="webapi-autostart")
+    auto_start_thread.start()
+except Exception as e:
+    LOGS.exception(f"Failed to start webapi auto-start thread: {e}")
 
