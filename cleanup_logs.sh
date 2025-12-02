@@ -52,14 +52,26 @@ if [ -f "nohup.out" ]; then
     CLEANED=$((CLEANED + 1))
 fi
 
+# Remove client directories (client_1, client_2, etc.)
+echo "Removing client directories..."
+DIRS_CLEANED=0
+for i in {1..5}; do
+    if [ -d "client_${i}" ]; then
+        rm -rf "client_${i}"
+        echo "  ✓ Removed client_${i}/ directory"
+        DIRS_CLEANED=$((DIRS_CLEANED + 1))
+    fi
+done
+
 echo
-if [ "$CLEANED" -gt 0 ]; then
+TOTAL_CLEANED=$((CLEANED + DIRS_CLEANED))
+if [ "$TOTAL_CLEANED" -gt 0 ]; then
     echo "=========================================="
-    echo "✓ Cleaned up $CLEANED file(s) successfully!"
+    echo "✓ Cleaned up $CLEANED file(s) and $DIRS_CLEANED directory/ies successfully!"
     echo "=========================================="
 else
     echo "=========================================="
-    echo "✗ No log/PID files found to clean up"
+    echo "✗ No files or directories found to clean up"
     echo "=========================================="
 fi
 

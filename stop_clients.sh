@@ -52,8 +52,22 @@ done
 # Remove other common files
 [ -f "nohup.out" ] && rm -f "nohup.out" && CLEANED=$((CLEANED + 1))
 
-if [ "$CLEANED" -gt 0 ]; then
-    echo "✓ Cleaned up $CLEANED file(s)"
+# Clean up client directories (client_1, client_2, etc.)
+DIRS_CLEANED=0
+for i in {1..5}; do
+    if [ -d "client_${i}" ]; then
+        rm -rf "client_${i}"
+        DIRS_CLEANED=$((DIRS_CLEANED + 1))
+    fi
+done
+
+if [ "$CLEANED" -gt 0 ] || [ "$DIRS_CLEANED" -gt 0 ]; then
+    if [ "$CLEANED" -gt 0 ]; then
+        echo "✓ Cleaned up $CLEANED file(s)"
+    fi
+    if [ "$DIRS_CLEANED" -gt 0 ]; then
+        echo "✓ Removed $DIRS_CLEANED client directory/ies"
+    fi
 fi
 
 echo ""

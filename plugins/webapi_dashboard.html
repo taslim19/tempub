@@ -255,6 +255,43 @@
             color: var(--text-secondary);
         }
 
+        .api-key-input {
+            position: fixed;
+            top: 20px;
+            right: 200px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            padding: 10px 15px;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .api-key-input input {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            width: 200px;
+        }
+
+        .api-key-input button {
+            background: var(--accent);
+            border: none;
+            color: var(--text-primary);
+            padding: 5px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .api-key-input button:hover {
+            background: var(--accent-hover);
+        }
+
         @media (max-width: 768px) {
             .grid {
                 grid-template-columns: 1fr;
@@ -275,6 +312,11 @@
         </div>
 
         <div class="refresh-indicator" id="refreshIndicator">Last updated: --</div>
+        
+        <div class="api-key-input" id="apiKeyInput" style="display: none;">
+            <input type="password" id="apiKeyField" placeholder="Enter API Key (if required)">
+            <button onclick="setApiKey()">Set Key</button>
+        </div>
 
         <div class="grid">
             <!-- Stats Card -->
@@ -310,19 +352,39 @@
         
         let refreshInterval;
 
+        function setApiKey() {
+            const key = document.getElementById('apiKeyField').value;
+            if (key) {
+                localStorage.setItem('api_key', key);
+                window.location.reload();
+            }
+        }
+
         async function fetchAPI(endpoint) {
             const headers = {};
-            if (API_KEY) {
-                headers['X-API-Key'] = API_KEY;
+            const currentKey = localStorage.getItem('api_key') || '';
+            // Only send API key if it's set (optional authentication)
+            if (currentKey) {
+                headers['X-API-Key'] = currentKey;
             }
             
             try {
                 const response = await fetch(`${API_BASE}${endpoint}`, { headers });
                 if (!response.ok) {
                     if (response.status === 401) {
-                        throw new Error('Unauthorized - Check API Key');
+                        // Show API key input if not already visible
+                        const apiKeyInput = document.getElementById('apiKeyInput');
+                        if (apiKeyInput && apiKeyInput.style.display === 'none') {
+                            apiKeyInput.style.display = 'flex';
+                        }
+                        throw new Error('Unauthorized - API Key required. Please enter your API key above.');
                     }
                     throw new Error(`HTTP ${response.status}`);
+                }
+                // Hide API key input on success
+                const apiKeyInput = document.getElementById('apiKeyInput');
+                if (apiKeyInput) {
+                    apiKeyInput.style.display = 'none';
                 }
                 return await response.json();
             } catch (error) {
@@ -400,8 +462,12 @@
                     }
                 })
                 .catch(error => {
+                    let errorMsg = error.message;
+                    if (error.message.includes('Unauthorized') || error.message.includes('API Key')) {
+                        errorMsg = 'API Key required! Please enter your API key in the input field at the top right.';
+                    }
                     document.getElementById('statsContent').innerHTML = 
-                        `<div class="error">Error loading stats: ${error.message}</div>`;
+                        `<div class="error">${errorMsg}</div>`;
                 });
         }
 
@@ -429,8 +495,12 @@
                     document.getElementById('pluginsContent').innerHTML = pluginsHtml;
                 })
                 .catch(error => {
+                    let errorMsg = error.message;
+                    if (error.message.includes('Unauthorized') || error.message.includes('API Key')) {
+                        errorMsg = 'API Key required! Please enter your API key in the input field at the top right.';
+                    }
                     document.getElementById('pluginsContent').innerHTML = 
-                        `<div class="error">Error loading plugins: ${error.message}</div>`;
+                        `<div class="error">${errorMsg}</div>`;
                 });
         }
 
@@ -478,8 +548,12 @@
                     document.getElementById('clientsContent').innerHTML = clientsHtml;
                 })
                 .catch(error => {
+                    let errorMsg = error.message;
+                    if (error.message.includes('Unauthorized') || error.message.includes('API Key')) {
+                        errorMsg = 'API Key required! Please enter your API key in the input field at the top right.';
+                    }
                     document.getElementById('clientsContent').innerHTML = 
-                        `<div class="error">Error loading clients: ${error.message}</div>`;
+                        `<div class="error">${errorMsg}</div>`;
                 });
         }
 
@@ -509,7 +583,21 @@
 
         // Initialize on page load
         window.addEventListener('load', () => {
-            startAutoRefresh();
+            // Check if API key is needed
+            fetch(`${API_BASE}/api/stats`)
+                .then(response => {
+                    if (response.status === 401) {
+                        // Show API key input
+                        document.getElementById('apiKeyInput').style.display = 'flex';
+                    } else {
+                        // Start auto-refresh if no auth needed
+                        startAutoRefresh();
+                    }
+                })
+                .catch(() => {
+                    // Start auto-refresh anyway
+                    startAutoRefresh();
+                });
         });
 
         // Cleanup on page unload

@@ -72,11 +72,13 @@ def start_web_api(port=8000, api_key=None):
         allow_headers=["*"],
     )
 
-    # Authentication function
+    # Authentication function (optional - only required if API key is configured)
     def verify_api_key(x_api_key: Optional[str] = Header(None)):
+        # Only require API key if it's configured
         if api_key:
             if not x_api_key or x_api_key != api_key:
-                raise HTTPException(status_code=401, detail="Invalid API Key")
+                raise HTTPException(status_code=401, detail="Invalid or missing API Key")
+        # If no API key is configured, allow access without authentication
         return x_api_key
 
     @app.get("/")
