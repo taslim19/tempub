@@ -315,8 +315,9 @@ def start_web_api(port=8000, api_key=None):
                 # Try to load .env from base directory
                 env_file = os.path.join(base_dir, ".env")
                 if os.path.exists(env_file):
-                    # Load .env but don't override existing env vars
-                    load_dotenv(env_file, override=False)
+                    # Load .env file to check for all client configurations
+                    # We need to load it to check for API_ID, API_ID1, API_ID2, etc.
+                    load_dotenv(env_file)
                 
                 required_vars = ["API_ID", "API_HASH", "SESSION", "MONGO_URI"]
                 for i in range(1, 6):
