@@ -25,6 +25,55 @@ def has_client_config(client_num):
             return False
     return True
 
+def stop_client(client_num):
+    """Stop a running client if it exists"""
+    base_dir = os.getcwd()
+    pid_file = os.path.join(base_dir, f"client_{client_num}.pid")
+    
+    if os.path.exists(pid_file):
+        try:
+            with open(pid_file, 'r') as f:
+                pid = int(f.read().strip())
+            
+            # Try to kill the process
+            try:
+                if sys.platform == "win32":
+                    subprocess.run(["taskkill", "/F", "/PID", str(pid)], 
+                                 capture_output=True, check=False)
+                else:
+                    os.kill(pid, 15)  # SIGTERM
+                print(f"  → Stopped Client {client_num} (PID: {pid})")
+            except (ProcessLookupError, OSError):
+                # Process already dead
+                pass
+            
+            # Remove PID file
+            try:
+                os.remove(pid_file)
+            except:
+                pass
+        except Exception:
+            pass
+    
+    # Also try to kill by process detection (psutil if available)
+    try:
+        import psutil
+        for proc in psutil.process_iter(['pid', 'cmdline', 'cwd']):
+            try:
+                cmdline = proc.info.get('cmdline', [])
+                proc_cwd = proc.info.get('cwd', '')
+                
+                # Check if this is a pyUltroid process in client_N directory
+                if any('pyUltroid' in str(arg) for arg in cmdline):
+                    if f'client_{client_num}' in proc_cwd:
+                        proc.kill()
+                        print(f"  → Stopped Client {client_num} (PID: {proc.info['pid']})")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+    except ImportError:
+        # psutil not available, skip process detection
+        pass
+
 def setup_client_dir(client_num, base_dir):
     """Minimal setup for client directory"""
     client_dir = os.path.join(base_dir, f"client_{client_num}")
@@ -107,6 +156,13 @@ def start_client(client_num):
             cwd=client_dir,
             env=env,
         )
+        # Save PID file
+        pid_file = os.path.join(base_dir, f"client_{client_num}.pid")
+        try:
+            with open(pid_file, 'w') as f:
+                f.write(str(proc.pid))
+        except:
+            pass
         print(f"  → Started (PID: {proc.pid})")
         return proc
     except Exception as e:
@@ -119,6 +175,22 @@ def main():
     print("=" * 60)
     print()
     
+    # First, stop clients that don't have config
+    print("Checking for clients without configuration...")
+    stopped_count = 0
+    for i in range(1, 6):
+        if not has_client_config(i):
+            # Check if this client is running and stop it
+            base_dir = os.getcwd()
+            pid_file = os.path.join(base_dir, f"client_{i}.pid")
+            if os.path.exists(pid_file):
+                stop_client(i)
+                stopped_count += 1
+    if stopped_count > 0:
+        print(f"✓ Stopped {stopped_count} client(s) without configuration")
+        print()
+    
+    # Now start clients with proper config
     processes = []
     for i in range(1, 6):
         proc = start_client(i)
@@ -136,11 +208,50 @@ def main():
         print(f"  Client {num}: PID {proc.pid}")
     print("=" * 60)
     print("\nPress Ctrl+C to exit (clients keep running)")
+    print("Monitoring clients - will stop any that lose configuration...")
     
     try:
         import time
         while True:
-            time.sleep(10)
+            time.sleep(30)  # Check every 30 seconds
+            
+            # Check all clients and stop those without config
+            for i in range(1, 6):
+                if not has_client_config(i):
+                    # Check if this client is still running
+                    base_dir = os.getcwd()
+                    pid_file = os.path.join(base_dir, f"client_{i}.pid")
+                    if os.path.exists(pid_file):
+                        try:
+                            with open(pid_file, 'r') as f:
+                                pid = int(f.read().strip())
+                            
+                            # Check if process is still alive
+                            try:
+                                if sys.platform == "win32":
+                                    result = subprocess.run(["tasklist", "/FI", f"PID eq {pid}"], 
+                                                          capture_output=True, check=False)
+                                    if str(pid) in result.stdout.decode():
+                                        # Process exists, kill it
+                                        subprocess.run(["taskkill", "/F", "/PID", str(pid)], 
+                                                     capture_output=True, check=False)
+                                        print(f"\n⚠ Client {i} stopped (configuration removed)")
+                                else:
+                                    os.kill(pid, 0)  # Check if process exists
+                                    # Process exists, kill it
+                                    os.kill(pid, 15)  # SIGTERM
+                                    print(f"\n⚠ Client {i} stopped (configuration removed)")
+                            except (ProcessLookupError, OSError):
+                                # Process already dead
+                                pass
+                            
+                            # Remove PID file
+                            try:
+                                os.remove(pid_file)
+                            except:
+                                pass
+                        except Exception:
+                            pass
     except KeyboardInterrupt:
         print("\n\nExiting. Clients still running.")
         print("Stop with: pkill -f pyUltroid")

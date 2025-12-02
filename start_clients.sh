@@ -103,6 +103,43 @@ echo "Multi-Client Ultroid Launcher (Bash)"
 echo "=========================================="
 echo
 
+# First, stop clients that don't have config
+echo "Checking for clients without configuration..."
+STOPPED=0
+for i in {1..5}; do
+    suffix=""
+    [ $i -gt 1 ] && suffix=$((i-1))
+    
+    api_id_var="API_ID$suffix"
+    api_hash_var="API_HASH$suffix"
+    session_var="SESSION$suffix"
+    mongo_uri_var="MONGO_URI$suffix"
+    
+    api_id_val="${!api_id_var:-$API_ID}"
+    api_hash_val="${!api_hash_var:-$API_HASH}"
+    session_val="${!session_var:-$SESSION}"
+    mongo_uri_val="${!mongo_uri_var:-$MONGO_URI}"
+    
+    # Check if any required var is missing
+    if [ -z "$api_id_val" ] || [ -z "$api_hash_val" ] || [ -z "$session_val" ] || [ -z "$mongo_uri_val" ]; then
+        # Check if this client is running and stop it
+        if [ -f "client_${i}.pid" ]; then
+            PID=$(cat "client_${i}.pid" 2>/dev/null)
+            if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+                echo "  → Stopping Client $i (missing config, PID: $PID)"
+                kill "$PID" 2>/dev/null
+                STOPPED=$((STOPPED + 1))
+            fi
+            rm -f "client_${i}.pid"
+        fi
+    fi
+done
+if [ "$STOPPED" -gt 0 ]; then
+    echo "✓ Stopped $STOPPED client(s) without configuration"
+    echo
+    sleep 2
+fi
+
 # Start clients 1-5
 for i in {1..5}; do
     start_client $i
