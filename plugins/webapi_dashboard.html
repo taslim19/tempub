@@ -292,6 +292,81 @@
             background: var(--accent-hover);
         }
 
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--border);
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content h2 {
+            color: var(--accent);
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+
+        .modal-content p {
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .api-key-modal-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .api-key-modal-input input {
+            flex: 1;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .api-key-modal-input button {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+            border: none;
+            color: var(--text-primary);
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1em;
+        }
+
+        .api-key-modal-input button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 20px rgba(0, 217, 255, 0.4);
+        }
+
+        .modal-hint {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border);
+        }
+
         @media (max-width: 768px) {
             .grid {
                 grid-template-columns: 1fr;
@@ -304,7 +379,20 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- API Key Prompt Modal (shown first if needed) -->
+    <div id="apiKeyModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>🔐 API Key Required</h2>
+            <p>Please enter your API key to access the dashboard:</p>
+            <div class="api-key-modal-input">
+                <input type="password" id="apiKeyModalField" placeholder="Enter your API key" autofocus onkeypress="if(event.key==='Enter') setApiKeyFromModal()">
+                <button onclick="setApiKeyFromModal()">Continue</button>
+            </div>
+            <p class="modal-hint">You can find your API key in your .env file (WEB_API_KEY) or set it via: .setdb WEB_API_KEY your-key</p>
+        </div>
+    </div>
+
+    <div class="container" id="mainContent" style="display: none;">
         <div class="header">
             <h1>🚀 Ultroid Bot Dashboard</h1>
             <div class="subtitle">Real-time monitoring and control panel</div>
@@ -357,6 +445,18 @@
             if (key) {
                 localStorage.setItem('api_key', key);
                 window.location.reload();
+            }
+        }
+
+        function setApiKeyFromModal() {
+            const key = document.getElementById('apiKeyModalField').value;
+            if (key) {
+                localStorage.setItem('api_key', key);
+                document.getElementById('apiKeyModal').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                startAutoRefresh();
+            } else {
+                alert('Please enter an API key');
             }
         }
 
@@ -513,12 +613,28 @@
                         return;
                     }
 
-                    const clients = data.clients || [];
-                    if (clients.length === 0) {
-                        document.getElementById('clientsContent').innerHTML = 
-                            '<div class="stat-item">No clients found</div>';
-                        return;
+                    let clients = data.clients || [];
+                    
+                    // Ensure we show all 5 clients (even if they don't exist)
+                    const clientMap = {};
+                    clients.forEach(c => { clientMap[c.id] = c; });
+                    
+                    // Create entries for all 5 clients
+                    for (let i = 1; i <= 5; i++) {
+                        if (!clientMap[i]) {
+                            clientMap[i] = {
+                                id: i,
+                                status: 'stopped',
+                                pid: null,
+                                cpu_percent: 0,
+                                memory_mb: 0,
+                                has_directory: false
+                            };
+                        }
                     }
+                    
+                    // Convert back to array and sort by ID
+                    clients = Object.values(clientMap).sort((a, b) => a.id - b.id);
 
                     const clientsHtml = clients.map(client => `
                         <div class="client-card">
@@ -583,19 +699,36 @@
 
         // Initialize on page load
         window.addEventListener('load', () => {
-            // Check if API key is needed
-            fetch(`${API_BASE}/api/stats`)
+            const storedKey = localStorage.getItem('api_key');
+            
+            // Check if API key is required
+            fetch(`${API_BASE}/api/stats`, {
+                headers: storedKey ? {'X-API-Key': storedKey} : {}
+            })
                 .then(response => {
                     if (response.status === 401) {
-                        // Show API key input
-                        document.getElementById('apiKeyInput').style.display = 'flex';
+                        // API key is required
+                        if (!storedKey) {
+                            // Show modal to enter API key first
+                            document.getElementById('apiKeyModal').style.display = 'flex';
+                            document.getElementById('mainContent').style.display = 'none';
+                        } else {
+                            // Key exists but is wrong, show input at top
+                            document.getElementById('apiKeyInput').style.display = 'flex';
+                            document.getElementById('mainContent').style.display = 'block';
+                            startAutoRefresh();
+                        }
                     } else {
-                        // Start auto-refresh if no auth needed
+                        // No API key needed or key is valid
+                        document.getElementById('apiKeyModal').style.display = 'none';
+                        document.getElementById('mainContent').style.display = 'block';
                         startAutoRefresh();
                     }
                 })
                 .catch(() => {
-                    // Start auto-refresh anyway
+                    // Network error, show content anyway
+                    document.getElementById('apiKeyModal').style.display = 'none';
+                    document.getElementById('mainContent').style.display = 'block';
                     startAutoRefresh();
                 });
         });

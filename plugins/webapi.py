@@ -131,11 +131,32 @@ def start_web_api(port=8000, api_key=None):
     async def get_plugins(api_key: str = Depends(verify_api_key)):
         """List all loaded plugins"""
         try:
-            from pyUltroid.loader import PLUGINS
-
+            from pyUltroid.dB._core import LOADED, HELP
+            
+            # Get plugin names from LOADED dict (keys are plugin names)
+            # Also include plugins from HELP dict which contains all loaded plugins
+            loaded_plugins = set(LOADED.keys()) if LOADED else set()
+            
+            # Also get from HELP dict which has plugin names organized by category
+            for category_plugins in HELP.values():
+                if isinstance(category_plugins, dict):
+                    loaded_plugins.update(category_plugins.keys())
+            
+            # Fallback: list plugin files from plugins directory
+            if not loaded_plugins:
+                import os
+                plugins_dir = os.path.join(os.getcwd(), "plugins")
+                if os.path.exists(plugins_dir):
+                    plugin_files = [
+                        f.replace(".py", "") 
+                        for f in os.listdir(plugins_dir) 
+                        if f.endswith(".py") and not f.startswith("__")
+                    ]
+                    loaded_plugins = set(plugin_files)
+            
             plugins = {
-                "total": len(PLUGINS),
-                "plugins": sorted(list(PLUGINS.keys()))
+                "total": len(loaded_plugins),
+                "plugins": sorted(list(loaded_plugins))
             }
             return plugins
         except Exception as e:
@@ -159,40 +180,42 @@ def start_web_api(port=8000, api_key=None):
             except ImportError:
                 has_psutil = False
 
+            # Show all 5 clients regardless of whether directories exist
             for i in range(1, 6):
                 client_dir = os.path.join(base_dir, f"client_{i}")
-                if os.path.exists(client_dir):
-                    # Check if process is running
-                    pid_file = os.path.join(base_dir, f"client_{i}.pid")
-                    is_running = False
-                    pid = None
-                    cpu = 0
-                    mem = 0
+                pid_file = os.path.join(base_dir, f"client_{i}.pid")
+                
+                # Check if process is running
+                is_running = False
+                pid = None
+                cpu = 0
+                mem = 0
+                has_directory = os.path.exists(client_dir)
 
-                    if os.path.exists(pid_file):
-                        try:
-                            with open(pid_file, 'r') as f:
-                                pid = int(f.read().strip())
-                            if has_psutil:
-                                if psutil.pid_exists(pid):
-                                    proc = psutil.Process(pid)
-                                    is_running = True
-                                    cpu = proc.cpu_percent(interval=0.1)
-                                    mem = proc.memory_info().rss / 1024 / 1024
-                            else:
-                                # Without psutil, just check if file exists
-                                # This is a basic check - process might not actually be running
+                if os.path.exists(pid_file):
+                    try:
+                        with open(pid_file, 'r') as f:
+                            pid = int(f.read().strip())
+                        if has_psutil:
+                            if psutil.pid_exists(pid):
+                                proc = psutil.Process(pid)
                                 is_running = True
-                        except Exception:
-                            pass
+                                cpu = proc.cpu_percent(interval=0.1)
+                                mem = proc.memory_info().rss / 1024 / 1024
+                        else:
+                            # Without psutil, just check if file exists
+                            is_running = True
+                    except Exception:
+                        pass
 
-                    clients.append({
-                        "id": i,
-                        "status": "running" if is_running else "stopped",
-                        "pid": pid,
-                        "cpu_percent": round(cpu, 2) if is_running else 0,
-                        "memory_mb": round(mem, 2) if is_running else 0,
-                    })
+                clients.append({
+                    "id": i,
+                    "status": "running" if is_running else "stopped",
+                    "pid": pid,
+                    "cpu_percent": round(cpu, 2) if is_running else 0,
+                    "memory_mb": round(mem, 2) if is_running else 0,
+                    "has_directory": has_directory,
+                })
 
             return {"clients": clients, "total": len(clients)}
         except Exception as e:
