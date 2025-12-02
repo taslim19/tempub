@@ -10,3 +10,9 @@ requests
 aiohttp
 catbox-uploader
 cloudscraper
+
+# Optional: For Web API & Dashboard (plugins/webapi.py)
+# fastapi
+# uvicorn[standard]
+# python-multipart
+# psutil  # For system stats in dashboard
