@@ -409,7 +409,10 @@
         <div class="grid">
             <!-- Stats Card -->
             <div class="card">
-                <h2><span class="card-icon">📊</span> Bot Statistics</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2 style="margin: 0;"><span class="card-icon">📊</span> Bot Statistics</h2>
+                    <div id="clientNavButtons" style="display: flex; gap: 5px;"></div>
+                </div>
                 <div id="statsContent" class="loading">Loading...</div>
             </div>
 
@@ -501,8 +504,16 @@
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
         }
 
+        let currentViewingClient = null;
+
+        function switchClient(clientId) {
+            currentViewingClient = clientId;
+            updateStats();
+        }
+
         function updateStats() {
-            fetchAPI('/api/stats')
+            const url = currentViewingClient ? `/api/stats?client_id=${currentViewingClient}` : '/api/stats';
+            fetchAPI(url)
                 .then(data => {
                     if (data.error) {
                         document.getElementById('statsContent').innerHTML = 
@@ -533,7 +544,7 @@
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">Username</span>
-                            <span class="stat-value">@${data.username || 'N/A'}</span>
+                            <span class="stat-value">${data.username ? '@' + data.username : 'N/A'}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">Name</span>
@@ -621,26 +632,9 @@
 
                     let clients = data.clients || [];
                     
-                    // Ensure we show all 5 clients (even if they don't exist)
-                    const clientMap = {};
-                    clients.forEach(c => { clientMap[c.id] = c; });
-                    
-                    // Create entries for all 5 clients
-                    for (let i = 1; i <= 5; i++) {
-                        if (!clientMap[i]) {
-                            clientMap[i] = {
-                                id: i,
-                                status: 'stopped',
-                                pid: null,
-                                cpu_percent: 0,
-                                memory_mb: 0,
-                                has_directory: false
-                            };
-                        }
-                    }
-                    
-                    // Convert back to array and sort by ID
-                    clients = Object.values(clientMap).sort((a, b) => a.id - b.id);
+                    // Only show clients that are configured (already filtered on backend)
+                    // Sort by ID
+                    clients = clients.sort((a, b) => a.id - b.id);
 
                     const clientsHtml = clients.map(client => `
                         <div class="client-card">

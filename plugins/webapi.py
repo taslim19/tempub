@@ -87,21 +87,26 @@ def start_web_api(port=8000, api_key=None):
         return HTMLResponse(content=get_dashboard_html())
 
     @app.get("/api/stats")
-    async def get_stats(api_key: str = Depends(verify_api_key)):
-        """Get bot statistics - shows stats for current client instance"""
+    async def get_stats(api_key: str = Depends(verify_api_key), client_id: int = None):
+        """Get bot statistics - shows stats for specified or current client instance"""
         try:
             from pyUltroid import ultroid_bot, start_time
             import psutil
             import os
 
+            # If client_id is specified, we need to get stats from that client
+            # For now, we can only get stats from the current client instance
+            # In the future, we could implement inter-process communication
+            
             # Detect which client instance this webapi is running in
-            current_client_id = None
+            current_client_id = client_id
             cwd = os.getcwd()
-            if 'client_' in cwd:
-                try:
-                    current_client_id = int(cwd.split('client_')[-1].split(os.sep)[0])
-                except:
-                    pass
+            if current_client_id is None:
+                if 'client_' in cwd:
+                    try:
+                        current_client_id = int(cwd.split('client_')[-1].split(os.sep)[0])
+                    except:
+                        pass
             
             # If not in client directory, try to detect from PID
             if current_client_id is None:
@@ -302,7 +307,31 @@ def start_web_api(port=8000, api_key=None):
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         continue
 
-            # Show all 5 clients regardless of whether directories exist
+            # Check which clients have environment variables configured
+            # Only show clients that have API_ID, API_HASH, SESSION, MONGO_URI
+            configured_clients = set()
+            try:
+                from dotenv import load_dotenv
+                env_file = os.path.join(base_dir, ".env")
+                if os.path.exists(env_file):
+                    load_dotenv(env_file)
+                
+                required_vars = ["API_ID", "API_HASH", "SESSION", "MONGO_URI"]
+                for i in range(1, 6):
+                    suffix = "" if i == 1 else str(i - 1)
+                    has_all = True
+                    for var in required_vars:
+                        var_name = var + suffix
+                        if not os.environ.get(var_name):
+                            has_all = False
+                            break
+                    if has_all:
+                        configured_clients.add(i)
+            except:
+                # If we can't check, show all clients that are running or have directories
+                pass
+
+            # Only show clients that have configuration OR are running
             for i in range(1, 6):
                 client_dir = os.path.join(base_dir, f"client_{i}")
                 pid_file = os.path.join(base_dir, f"client_{i}.pid")
@@ -337,6 +366,10 @@ def start_web_api(port=8000, api_key=None):
                     except Exception:
                         pass
 
+                # Only include clients that have configuration OR are running
+                if configured_clients and i not in configured_clients and not is_running:
+                    continue  # Skip clients without configuration that aren't running
+                
                 clients.append({
                     "id": i,
                     "status": "running" if is_running else "stopped",
