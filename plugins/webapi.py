@@ -227,7 +227,13 @@ def start_web_api(port=8000, api_key=None):
             import os
 
             clients = []
-            base_dir = os.getcwd()
+            # Get base directory (parent of client_N directories)
+            cwd = os.getcwd()
+            if 'client_' in cwd:
+                # We're in a client directory, go up to parent
+                base_dir = os.path.dirname(cwd)
+            else:
+                base_dir = cwd
             
             # Try to import psutil for process checking
             try:
@@ -243,23 +249,30 @@ def start_web_api(port=8000, api_key=None):
                     try:
                         cmdline = proc.info.get('cmdline', [])
                         if cmdline and any('pyUltroid' in str(arg) for arg in cmdline):
-                            cwd = proc.info.get('cwd', '')
+                            proc_cwd = proc.info.get('cwd', '')
                             pid = proc.info['pid']
                             
                             # Try to determine which client this is
                             client_id = None
                             
                             # Method 1: Check if cwd is in a client_N directory
-                            if 'client_' in cwd:
+                            if 'client_' in proc_cwd:
                                 try:
-                                    client_id = int(cwd.split('client_')[-1].split(os.sep)[0])
+                                    # Extract client number from path like /path/to/client_1 or /path/to/client_2/
+                                    parts = proc_cwd.split('client_')
+                                    if len(parts) > 1:
+                                        client_num_str = parts[-1].split(os.sep)[0].split('/')[0]
+                                        client_id = int(client_num_str)
                                 except:
                                     pass
                             
-                            # Method 2: Check PID files
+                            # Method 2: Check PID files (PID files are in base directory, not client directories)
                             if client_id is None:
+                                # PID files are stored in the base directory (parent of client_N)
+                                # Get base directory from current process or from proc_cwd
+                                proc_base_dir = base_dir  # Use the base_dir we calculated above
                                 for i in range(1, 6):
-                                    pid_file = os.path.join(base_dir, f"client_{i}.pid")
+                                    pid_file = os.path.join(proc_base_dir, f"client_{i}.pid")
                                     if os.path.exists(pid_file):
                                         try:
                                             with open(pid_file, 'r') as f:
