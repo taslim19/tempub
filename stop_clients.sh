@@ -33,6 +33,29 @@ if [ -n "$WRAPPER_PIDS" ]; then
     echo "✓ Stopped wrapper processes"
 fi
 
+# Clean up log and PID files
+echo ""
+echo "Cleaning up log and PID files..."
+
+CLEANED=0
+# Remove client log and PID files
+for i in {1..5}; do
+    [ -f "client_${i}.log" ] && rm -f "client_${i}.log" && CLEANED=$((CLEANED + 1))
+    [ -f "client_${i}.pid" ] && rm -f "client_${i}.pid" && CLEANED=$((CLEANED + 1))
+done
+
+# Remove ultroid log files
+for i in {1..10}; do
+    [ -f "ultroid${i}.log" ] && rm -f "ultroid${i}.log" && CLEANED=$((CLEANED + 1))
+done
+
+# Remove other common files
+[ -f "nohup.out" ] && rm -f "nohup.out" && CLEANED=$((CLEANED + 1))
+
+if [ "$CLEANED" -gt 0 ]; then
+    echo "✓ Cleaned up $CLEANED file(s)"
+fi
+
 echo ""
 echo "Done!"
 

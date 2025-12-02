@@ -56,6 +56,53 @@ else
     echo "✓ Force killed remaining processes"
 fi
 
+# Clean up log and PID files
+echo
+echo "Cleaning up log and PID files..."
+CLEANED=0
+
+# Remove client log files
+for i in {1..5}; do
+    if [ -f "client_${i}.log" ]; then
+        rm -f "client_${i}.log"
+        CLEANED=$((CLEANED + 1))
+    fi
+done
+
+# Remove client PID files
+for i in {1..5}; do
+    if [ -f "client_${i}.pid" ]; then
+        rm -f "client_${i}.pid"
+        CLEANED=$((CLEANED + 1))
+    fi
+done
+
+# Remove ultroid log files (ultroid1.log, ultroid2.log, etc.)
+for i in {1..10}; do
+    if [ -f "ultroid${i}.log" ]; then
+        rm -f "ultroid${i}.log"
+        CLEANED=$((CLEANED + 1))
+    fi
+done
+
+# Remove multi_client.pid if exists
+if [ -f "multi_client.pid" ]; then
+    rm -f "multi_client.pid"
+    CLEANED=$((CLEANED + 1))
+fi
+
+# Remove nohup.out if exists
+if [ -f "nohup.out" ]; then
+    rm -f "nohup.out"
+    CLEANED=$((CLEANED + 1))
+fi
+
+if [ "$CLEANED" -gt 0 ]; then
+    echo "✓ Cleaned up $CLEANED file(s)"
+else
+    echo "✗ No log/PID files to clean up"
+fi
+
 echo
 echo "=========================================="
 echo "Done!"
