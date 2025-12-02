@@ -366,9 +366,9 @@ def start_web_api(port=8000, api_key=None):
                     except Exception:
                         pass
 
-                # Only include clients that have configuration OR are running
-                if configured_clients and i not in configured_clients and not is_running:
-                    continue  # Skip clients without configuration that aren't running
+                # Only include clients that have configuration (don't show unconfigured clients even if running)
+                if configured_clients and i not in configured_clients:
+                    continue  # Skip clients without configuration
                 
                 clients.append({
                     "id": i,

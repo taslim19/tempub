@@ -505,9 +505,67 @@
         }
 
         let currentViewingClient = null;
+        let allRunningClients = [];
+
+        function updateClientNavButtons(runningClients) {
+            allRunningClients = runningClients;
+            const navButtonsDiv = document.getElementById('clientNavButtons');
+            if (!navButtonsDiv) return;
+            
+            if (runningClients.length <= 1) {
+                navButtonsDiv.innerHTML = '';
+                return;
+            }
+            
+            // Sort by client ID
+            runningClients.sort((a, b) => a.id - b.id);
+            
+            // Find current client index
+            let currentIdx = 0;
+            if (currentViewingClient) {
+                const found = runningClients.findIndex(c => c.id === currentViewingClient);
+                if (found >= 0) currentIdx = found;
+            } else if (window.currentClientId) {
+                const found = runningClients.findIndex(c => c.id === window.currentClientId);
+                if (found >= 0) currentIdx = found;
+            }
+            
+            const currentClient = runningClients[currentIdx];
+            if (!currentViewingClient && currentClient) {
+                currentViewingClient = currentClient.id;
+            }
+            
+            // Create navigation buttons
+            let buttonsHtml = '<div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">';
+            
+            // Previous button
+            if (currentIdx > 0) {
+                const prevClient = runningClients[currentIdx - 1];
+                buttonsHtml += `<button onclick="switchClient(${prevClient.id})" style="background: var(--accent); border: none; color: var(--text-primary); padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: all 0.2s;">◀ Prev (Client ${prevClient.id})</button>`;
+            }
+            
+            // Current client indicator
+            buttonsHtml += `<span style="color: var(--accent); font-size: 0.9em; padding: 0 10px; font-weight: bold;">Viewing: Client ${currentClient ? currentClient.id : 'N/A'}</span>`;
+            
+            // Next button
+            if (currentIdx < runningClients.length - 1) {
+                const nextClient = runningClients[currentIdx + 1];
+                buttonsHtml += `<button onclick="switchClient(${nextClient.id})" style="background: var(--accent); border: none; color: var(--text-primary); padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: all 0.2s;">Next (Client ${nextClient.id}) ▶</button>`;
+            }
+            
+            buttonsHtml += '</div>';
+            navButtonsDiv.innerHTML = buttonsHtml;
+        }
 
         function switchClient(clientId) {
+            // Note: Each client runs its own webapi instance
+            // To view another client's stats, you need to access that client's webapi
+            // For now, we'll show a message and try to fetch (will show current client's stats)
             currentViewingClient = clientId;
+            updateClientNavButtons(allRunningClients);
+            
+            // Show a note that we're viewing the current client's stats
+            // In the future, we could implement cross-client stats fetching
             updateStats();
         }
 
@@ -635,6 +693,10 @@
                     // Only show clients that are configured (already filtered on backend)
                     // Sort by ID
                     clients = clients.sort((a, b) => a.id - b.id);
+                    
+                    // Update navigation buttons for running clients
+                    const runningClients = clients.filter(c => c.status === 'running');
+                    updateClientNavButtons(runningClients);
 
                     const clientsHtml = clients.map(client => `
                         <div class="client-card">
@@ -679,6 +741,21 @@
             updateClients();
             updateRefreshTime();
         }
+        
+        // Initialize: set current client from stats if available
+        function initClientView() {
+            fetchAPI('/api/stats')
+                .then(data => {
+                    if (data.client_id) {
+                        currentViewingClient = data.client_id;
+                        window.currentClientId = data.client_id;
+                    }
+                    updateClients();
+                })
+                .catch(() => {
+                    updateClients();
+                });
+        }
 
         function updateRefreshTime() {
             const now = new Date();
@@ -716,12 +793,15 @@
                             // Key exists but is wrong, show input at top
                             document.getElementById('apiKeyInput').style.display = 'flex';
                             document.getElementById('mainContent').style.display = 'block';
+                            initClientView();
+                            initClientView();
                             startAutoRefresh();
                         }
                     } else {
                         // No API key needed or key is valid
                         document.getElementById('apiKeyModal').style.display = 'none';
                         document.getElementById('mainContent').style.display = 'block';
+                        initClientView();
                         startAutoRefresh();
                     }
                 })
@@ -729,6 +809,7 @@
                     // Network error, show content anyway
                     document.getElementById('apiKeyModal').style.display = 'none';
                     document.getElementById('mainContent').style.display = 'block';
+                    initClientView();
                     startAutoRefresh();
                 });
         });
